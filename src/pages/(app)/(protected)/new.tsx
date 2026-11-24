@@ -1,12 +1,14 @@
 /**
- * Story picker: reading level, up to three interest chips, and an optional
- * typed idea. Submitting calls the `startStory` action (which validates and
- * caps) and goes straight to the reader, which fills in live as the job runs.
+ * Story picker: reading level, then up to three picks, from the interest
+ * chips and/or the child's own typed ideas (Enter or "Add" turns a typed idea
+ * into a chip; it never starts a story). Only the "Make my story" button
+ * calls `startStory` (which validates and caps) and goes straight to the
+ * reader, which fills in live as the job runs.
  */
 
 import { useState, type FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Search, Sparkles } from 'lucide-react'
+import { Plus, Search, Sparkles, X } from 'lucide-react'
 import { Button } from '@/components/ui'
 import { cn } from '@/lib/utils'
 import { runAction } from '@/lib/actions'
@@ -42,24 +44,54 @@ export default function NewStoryPage() {
       .filter((id) => INTERESTS.some((i) => i.id === id))
       .slice(0, MAX_INTERESTS),
   )
-  const [custom, setCustom] = useState(params.get('custom') ?? '')
+  // Typed ideas already added as chips; `draft` is what is in the box now.
+  const [customs, setCustoms] = useState<string[]>(() =>
+    params.getAll('custom').filter(Boolean).slice(0, MAX_INTERESTS),
+  )
+  const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const full = picked.length >= MAX_INTERESTS
-  const hasTopic = picked.length > 0 || custom.trim().length > 0
+  const count = picked.length + customs.length
+  const full = count >= MAX_INTERESTS
+  // Text typed but not yet added with Enter/Add still counts when the child
+  // presses "Make my story", as long as there is room for it.
+  const pendingIdea = full ? '' : draft.replace(/\s+/g, ' ').trim()
+  const hasTopic = count > 0 || pendingIdea.length > 0
   const canGo = grade !== null && hasTopic && !busy
 
   function toggle(id: string) {
     setError(null)
     setPicked((cur) =>
-      cur.includes(id) ? cur.filter((x) => x !== id) : cur.length >= MAX_INTERESTS ? cur : [...cur, id],
+      cur.includes(id) ? cur.filter((x) => x !== id) : full ? cur : [...cur, id],
     )
+  }
+
+  function addCustom() {
+    const idea = draft.replace(/\s+/g, ' ').trim()
+    if (!idea || full) return
+    setError(null)
+    if (!customs.some((c) => c.toLowerCase() === idea.toLowerCase())) setCustoms((cur) => [...cur, idea])
+    setDraft('')
   }
 
   async function submit(e: FormEvent) {
     e.preventDefault()
+    // Only the "Make my story" button starts a story. Some phone keyboards
+    // submit the form from their Go/Search key without an Enter keydown; that
+    // adds the typed idea as a chip instead, like Enter does.
+    const submitter = (e.nativeEvent as SubmitEvent).submitter
+    if (!(submitter instanceof HTMLElement) || submitter.dataset.testid !== 'make-story') {
+      addCustom()
+      return
+    }
     if (!canGo || grade === null) return
+    const ideas =
+      pendingIdea && !customs.some((c) => c.toLowerCase() === pendingIdea.toLowerCase())
+        ? [...customs, pendingIdea]
+        : customs
+    setCustoms(ideas)
+    setDraft('')
     setBusy(true)
     setError(null)
     try {
@@ -70,7 +102,7 @@ export default function NewStoryPage() {
     const r = await runAction<{ storyId: string }>('startStory', {
       grade,
       interests: picked,
-      custom: custom.trim(),
+      custom: ideas,
     })
     if (!r.success) {
       setBusy(false)
@@ -124,8 +156,12 @@ export default function NewStoryPage() {
           <StepDot n={2} /> What should it be about?
         </legend>
         <p className="mt-1 text-[15px] text-muted-foreground" aria-live="polite">
-          Pick up to {MAX_INTERESTS}.{' '}
-          {picked.length > 0 && <span className="font-semibold text-foreground">{picked.length} picked</span>}
+          Pick up to {MAX_INTERESTS}, or add your own.{' '}
+          {count > 0 && (
+            <span className="font-semibold text-foreground">
+              {count} of {MAX_INTERESTS} picked
+            </span>
+          )}
         </p>
         <div className="mt-4 flex flex-wrap gap-2.5">
           {INTERESTS.map((it) => {
@@ -152,25 +188,63 @@ export default function NewStoryPage() {
               </button>
             )
           })}
+          {customs.map((c) => (
+            <button
+              key={c}
+              type="button"
+              aria-pressed
+              aria-label={`Remove ${c}`}
+              onClick={() => setCustoms((cur) => cur.filter((x) => x !== c))}
+              className="flex items-center gap-2 rounded-full border-2 border-coral bg-secondary px-4 py-2.5 text-[16px] font-semibold text-secondary-foreground"
+            >
+              <span aria-hidden className="text-xl leading-none">
+                ✨
+              </span>
+              {c}
+              <X className="h-4 w-4" aria-hidden />
+            </button>
+          ))}
         </div>
 
         <label htmlFor="custom-idea" className="mt-8 block text-[15px] font-semibold text-foreground">
           Or type your own idea
         </label>
-        <div className="relative mt-2 max-w-xl">
-          <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" aria-hidden />
-          <input
-            id="custom-idea"
-            type="search"
-            value={custom}
-            maxLength={MAX_CUSTOM_INTEREST_LENGTH}
-            onChange={(e) => {
-              setError(null)
-              setCustom(e.target.value)
-            }}
-            placeholder="volcanoes, my cat Pepper, baking cookies…"
-            className="h-14 w-full rounded-full border-2 border-input bg-card pl-12 pr-5 text-[17px] text-foreground outline-none placeholder:text-muted-foreground/70 focus:border-primary"
-          />
+        <div className="mt-2 flex max-w-xl gap-2">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" aria-hidden />
+            <input
+              id="custom-idea"
+              type="search"
+              value={draft}
+              disabled={full}
+              maxLength={MAX_CUSTOM_INTEREST_LENGTH}
+              onChange={(e) => {
+                setError(null)
+                setDraft(e.target.value)
+              }}
+              onKeyDown={(e) => {
+                // Enter adds the idea as a chip; it must never submit the form.
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  // Enter that confirms an IME composition (e.g. Japanese
+                  // input) finishes the word; it does not add the idea yet.
+                  if (e.nativeEvent.isComposing) return
+                  addCustom()
+                }
+              }}
+              placeholder={full ? `You picked ${MAX_INTERESTS}! Remove one to add more.` : 'volcanoes, my cat Pepper, baking cookies…'}
+              className="h-14 w-full rounded-full border-2 border-input bg-card pl-12 pr-5 text-[17px] text-foreground outline-none placeholder:text-muted-foreground/70 focus:border-primary disabled:opacity-60"
+            />
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={addCustom}
+            disabled={full || !draft.trim()}
+            className="h-14 rounded-full border-2 px-5 text-[16px] font-semibold"
+          >
+            <Plus aria-hidden /> Add
+          </Button>
         </div>
       </fieldset>
 

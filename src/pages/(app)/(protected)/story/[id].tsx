@@ -8,12 +8,11 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from 'deepspace'
-import { ArrowLeft, BookOpen, Trash2 } from 'lucide-react'
+import { ArrowLeft, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui'
 import { runAction } from '@/lib/actions'
-import { INTERESTS, interestLabel, levelFor, type StoryRecord } from '@/story/catalog'
-import { StoryText } from '@/components/story/StoryText'
-import { Quiz } from '@/components/story/Quiz'
+import { INTERESTS, interestLabel, type StoryRecord } from '@/story/catalog'
+import { Reader } from '@/components/story/Reader'
 import { stopAll } from '@/components/story/speech'
 
 const STAGES: { key: StoryRecord['status']; label: string }[] = [
@@ -28,7 +27,6 @@ export default function StoryPage() {
   const navigate = useNavigate()
   const { records, status } = useQuery<StoryRecord>('stories')
   const story = useMemo(() => records.find((r) => r.recordId === id), [records, id])
-  const [quizOpen, setQuizOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
@@ -47,30 +45,13 @@ export default function StoryPage() {
   }
 
   const s = story.data
-  const level = levelFor(s.grade)
   const known = new Set(INTERESTS.map((i) => i.id))
-  const retryHref = `/new?grade=${s.grade}&interests=${(s.interests ?? []).filter((i) => known.has(i)).join(',')}&custom=${encodeURIComponent((s.interests ?? []).find((i) => !known.has(i)) ?? '')}`
-
-  if (s.status === 'failed') {
-    return (
-      <CenteredNote>
-        <span className="block text-5xl" aria-hidden>
-          🙈
-        </span>
-        <span className="mt-3 block font-display text-2xl font-semibold text-foreground">Oops! This story got stuck.</span>
-        <span className="mt-2 block">{s.error || 'Something went wrong while writing it.'}</span>
-        <Link
-          to={retryHref}
-          className="mt-6 inline-flex h-12 items-center rounded-full bg-primary px-6 font-semibold text-primary-foreground"
-        >
-          Try again
-        </Link>
-      </CenteredNote>
-    )
-  }
-
-  const hasText = (s.paragraphs?.length ?? 0) > 0
-  const ready = s.status === 'ready'
+  const retryParams = new URLSearchParams({
+    grade: String(s.grade),
+    interests: (s.interests ?? []).filter((i) => known.has(i)).join(','),
+  })
+  for (const idea of (s.interests ?? []).filter((i) => !known.has(i))) retryParams.append('custom', idea)
+  const retryHref = `/new?${retryParams}`
 
   async function remove() {
     setDeleting(true)
@@ -80,66 +61,49 @@ export default function StoryPage() {
     else setDeleting(false)
   }
 
+  if (s.status === 'failed') {
+    return (
+      <CenteredNote>
+        <span className="block text-5xl" aria-hidden>
+          🙈
+        </span>
+        <span className="mt-3 block font-display text-2xl font-semibold text-foreground">Oops! This story got stuck.</span>
+        <span className="mt-2 block">{s.error || 'Something went wrong while writing it.'}</span>
+        <span className="mt-6 flex flex-wrap items-center justify-center gap-3">
+          <Link
+            to={retryHref}
+            className="inline-flex h-12 items-center rounded-full bg-primary px-6 font-semibold text-primary-foreground"
+          >
+            Try again
+          </Link>
+          <Button variant="ghost" loading={deleting} onClick={remove} className="h-12 rounded-full px-5">
+            <Trash2 className="h-4 w-4" aria-hidden /> Remove it
+          </Button>
+        </span>
+      </CenteredNote>
+    )
+  }
+
+  const paragraphs = s.paragraphs ?? []
+  const ready = s.status === 'ready'
+
   return (
-    <article className="mx-auto max-w-3xl px-4 pb-28 pt-6 sm:pt-10">
+    <article className="mx-auto max-w-6xl px-4 pb-28 pt-6 sm:pt-10">
       <Link to="/home" className="inline-flex items-center gap-1.5 text-[15px] font-semibold text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-4 w-4" aria-hidden /> Bookshelf
       </Link>
 
-      {!ready && <Progress status={s.status} message={s.progressMessage} />}
+      {!ready && (
+        <div className="mx-auto max-w-3xl">
+          <Progress status={s.status} message={s.progressMessage} />
+        </div>
+      )}
 
-      {!hasText ? (
+      {paragraphs.length === 0 ? (
         <WritingPlaceholder interests={(s.interests ?? []).map(interestLabel)} />
       ) : (
         <>
-          <header className="mt-6">
-            <p className="text-[15px] font-semibold text-coral">
-              {level.label} · {s.wordCount} words
-            </p>
-            <h1 className="mt-1 text-4xl font-semibold text-foreground sm:text-5xl" data-testid="story-title">
-              {s.title}
-            </h1>
-          </header>
-
-          <div className="mt-8">
-            <StoryText
-              paragraphs={s.paragraphs}
-              imagePaths={s.imagePaths ?? []}
-              imageAlts={s.imageAlts ?? []}
-              imageSlots={s.imageSlots ?? []}
-              painting={s.status === 'illustrating'}
-              grade={s.grade}
-            />
-          </div>
-
-          <p className="mt-10 text-center font-display text-2xl font-semibold text-primary">The End</p>
-
-          <div className="mt-10">
-            {quizOpen ? (
-              <Quiz
-                storyId={story.recordId}
-                questions={s.questions ?? []}
-                soundWords={s.soundWords ?? []}
-                audioPending={!ready}
-                newStoryHref={retryHref}
-              />
-            ) : (
-              <div className="rounded-3xl border-2 border-dashed border-primary/40 bg-card p-8 text-center">
-                <p className="font-display text-2xl font-semibold text-foreground">Done reading?</p>
-                <p className="mt-1 text-[17px] text-muted-foreground">
-                  Answer {s.questions?.length ?? 3} questions and earn your stars.
-                </p>
-                <Button
-                  size="lg"
-                  className="mt-5 h-14 rounded-full px-8 text-lg font-semibold"
-                  onClick={() => setQuizOpen(true)}
-                  data-testid="start-quiz"
-                >
-                  <BookOpen aria-hidden /> Start the questions
-                </Button>
-              </div>
-            )}
-          </div>
+          <Reader story={s} storyId={story.recordId} newStoryHref={retryHref} />
 
           <div className="mt-16 flex justify-center">
             {confirmDelete ? (
@@ -195,7 +159,7 @@ function WritingPlaceholder({ interests }: { interests: string[] }) {
       {interests.length > 0 && (
         <p className="mt-2 text-lg text-muted-foreground">A brand-new story about {interests.join(' and ')}.</p>
       )}
-      <p className="mt-1 text-[15px] text-muted-foreground">This takes about half a minute. The pictures come next!</p>
+      <p className="mt-1 text-[15px] text-muted-foreground">This takes about half a minute. The picture comes next!</p>
       <div className="mx-auto mt-10 max-w-xl space-y-3" aria-hidden>
         {[100, 92, 96, 70].map((w, i) => (
           <div key={i} className="sprout-shimmer h-5 rounded-full" style={{ width: `${w}%` }} />

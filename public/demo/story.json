@@ -1,0 +1,153 @@
+{
+  "title": "Mia and the Aquarium Adventure",
+  "grade": 2,
+  "interests": [
+    "friendship",
+    "aquarium",
+    "girl scouts troop"
+  ],
+  "status": "ready",
+  "progressMessage": "",
+  "paragraphs": [
+    "Mia moved to a new town in June. She had curly red hair and a yellow raincoat. Today she would meet her scout troop at the park. Mia felt nervous about meeting everyone new. She did not know a single person in the troop yet. Mia took a deep breath and walked toward the girls.",
+    "A girl with short black hair waved at her. Her name was Lena, and she wore a green vest. \"Hi! Sit with us,\" Lena said with a grin. The troop leader held up a big blue map. \"We are going to the aquarium next week!\" she said. Mia had never been to one before.",
+    "On Saturday, the troop climbed onto a yellow bus. Mia sat beside Lena by the window. Lena had a bag of crackers and offered Mia one. \"I was new last year too,\" Lena whispered. Mia smiled for the first time all morning. They giggled about the bumpy ride.",
+    "At last, the bus stopped in front of a huge aquarium. Mia pressed her nose against the cool glass. Inside, the air smelled like salt and sea water. Lena pointed at a sign that read \"Welcome, Explorers!\" \"Wow, this place is amazing!\" Mia whispered. Her worried feeling began to fade away.",
+    "Mia and Lena walked past a giant tank. A sea turtle glided slowly through the blue water. Its shell had green and brown patterns like a puzzle. Mia tapped the glass gently with one finger. The turtle blinked, as if it said hello back. Lena giggled and waved back at it.",
+    "Next, they stopped at a tank full of bright coral. Pink and orange branches swayed in the water. Lena pointed to a small orange fish hiding inside. \"Let's be patient and wait,\" Mia said softly. Slowly, the little fish poked its head out. Both girls grinned at the cheerful fish.",
+    "The leader asked everyone to find a fish that shimmered. Mia and Lena teamed up for the hunt. They checked every tank with care. Lena spotted a silver fish gliding past the light. \"You found it! Thanks for being my buddy,\" Mia said. Lena smiled and gave her a high five.",
+    "The silver fish was shimmering in the blue light. Its scales sparkled like tiny silver mirrors. Mia felt happy and very proud inside. She had made a real friend, and it felt wonderful. Lena said, \"Let's be buddies every week!\" Their whole troop clapped for them both.",
+    "On the bus ride home, Mia leaned against Lena. They shared a sleepy, happy smile. Mia remembered her nervous first morning at the park. Now she had a best friend and a whole troop. \"See you next Saturday, Lena!\" Mia said. Her new town felt like home at last."
+  ],
+  "imagePaths": [
+    "/demo/panels.png"
+  ],
+  "imageAlts": [
+    "A girl with curly red hair in a yellow raincoat stands shyly at a sunny park, looking toward a group of girls.",
+    "A girl in a green vest waves to a curly-haired girl while a troop leader holds up a big blue map in the park.",
+    "Two girls sit together by a bus window, and one shares a bag of crackers with the other.",
+    "Two girls stand at the entrance of a big aquarium, with one leaning close to the glass door and smiling.",
+    "A girl taps a large tank where a green and brown sea turtle swims, while her friend waves nearby.",
+    "Two girls smile at a tank of pink and orange coral where a small orange fish peeks out.",
+    "Two girls in an aquarium point at a silver fish and high-five each other beside a glowing tank.",
+    "A shimmering silver fish swims in blue light as two smiling girls stand together while their troop claps.",
+    "Two tired but happy girls sit together on a bus at sunset, one resting her head on the other's shoulder."
+  ],
+  "imageSlots": [],
+  "imageLayout": "grid3x3",
+  "questions": [
+    {
+      "kind": "comprehension",
+      "prompt": "What did Lena share with Mia on the bus?",
+      "explanation": "On the bus, Lena had a bag of crackers and offered Mia one.",
+      "choices": [
+        "a red ball",
+        "a bag of crackers",
+        "a pink map"
+      ],
+      "answerIndex": 1
+    },
+    {
+      "kind": "comprehension",
+      "prompt": "What happened first in the story?",
+      "explanation": "The story starts with Mia walking to the park, where Lena waves and invites her to sit with the troop.",
+      "choices": [
+        "Mia met Lena at the park",
+        "Mia saw a sea turtle",
+        "Mia rode home on the bus"
+      ],
+      "answerIndex": 0
+    },
+    {
+      "kind": "comprehension",
+      "prompt": "Why did Mia feel happy and proud at the end?",
+      "explanation": "On the last pages, Mia says she has made a real friend, and it felt wonderful.",
+      "choices": [
+        "She wanted to go home",
+        "She lost her yellow raincoat",
+        "She made a real friend"
+      ],
+      "answerIndex": 2
+    }
+  ],
+  "checkpoints": [
+    {
+      "kind": "phonics",
+      "word": "nervous",
+      "chunks": [
+        "ner",
+        "vous"
+      ],
+      "tip": "The letter r after e makes the er sound, like in the word her.",
+      "prompt": "How many syllables does the word nervous have?",
+      "afterParagraph": 1,
+      "choices": [
+        "one",
+        "two",
+        "three"
+      ],
+      "answerIndex": 1,
+      "audioPath": "/demo/phonics-1.mp3"
+    },
+    {
+      "kind": "phonics",
+      "word": "aquarium",
+      "chunks": [
+        "a",
+        "qua",
+        "ri",
+        "um"
+      ],
+      "tip": "The letters q and u team up and make a kw sound, like in queen.",
+      "prompt": "Which sound does qu make in aquarium?",
+      "afterParagraph": 3,
+      "choices": [
+        "kw",
+        "sh",
+        "ay"
+      ],
+      "answerIndex": 0,
+      "audioPath": "/demo/phonics-2.mp3"
+    },
+    {
+      "kind": "phonics",
+      "word": "coral",
+      "chunks": [
+        "cor",
+        "al"
+      ],
+      "tip": "When an r follows the letter o, the o makes a new sound, like or in corn.",
+      "prompt": "Which word rhymes with coral?",
+      "afterParagraph": 5,
+      "choices": [
+        "moral",
+        "camel",
+        "sail"
+      ],
+      "answerIndex": 0,
+      "audioPath": "/demo/phonics-3.mp3"
+    },
+    {
+      "kind": "phonics",
+      "word": "shimmering",
+      "chunks": [
+        "shim",
+        "mer",
+        "ing"
+      ],
+      "tip": "Two m letters in a row keep the i short, so it sounds like shim.",
+      "prompt": "How many syllables does shimmering have?",
+      "afterParagraph": 7,
+      "choices": [
+        "two",
+        "three",
+        "four"
+      ],
+      "answerIndex": 1,
+      "audioPath": "/demo/phonics-4.mp3"
+    }
+  ],
+  "soundWords": [],
+  "wordCount": 456,
+  "error": ""
+}

@@ -4,8 +4,8 @@
  * `generate-story` is the whole paid pipeline for one story:
  *
  *   1. Claude writes the story + quiz as JSON  → record shows text   (status: illustrating)
- *   2. Gemini paints two pictures → R2         → record shows images (status: recording)
- *   3. ElevenLabs says the practice words → R2 → record shows audio  (status: ready)
+ *   2. Gemini paints 9 page pictures as one grid → R2 → panels  (status: recording)
+ *   3. Hope (ElevenLabs) says each phonics word → R2 → audio  (status: ready)
  *
  * Each stage patches the story record, and RecordRoom pushes the patch to the
  * reader's open page over its WebSocket, so the child starts reading after
@@ -18,22 +18,26 @@ import type { ActionTools, Job, JobContext } from 'deepspace/worker'
 import type { Env } from '../worker'
 import { GENERATE_STORY_JOB, type GenerateStoryPayload } from './actions/index'
 import { createActionTools } from './server/action-routes'
-import type { Question, SoundWord, StoryRecord } from './story/catalog'
+import type { StoryRecord } from './story/catalog'
+import { recordSpeech } from './story/voice'
 import {
   SYSTEM_PROMPT,
   buildUserPrompt,
   countWords,
   decodeDataUrl,
   extractJson,
-  illustrationPrompt,
+  panelGridPrompt,
   parseStoryDraft,
   type StoryDraft,
 } from './story/prompts'
 
-export const STORY_MODEL = 'claude-sonnet-5-5'
+/**
+ * Haiku, not Sonnet: Claude was ~60% of a story's cost on Sonnet (~$0.19 of
+ * ~$0.33). Stories for ages 6-8 are short and simple, and the strict JSON
+ * validation in parseStoryDraft catches a weaker draft either way.
+ */
+export const STORY_MODEL = 'claude-haiku-5-5'
 export const IMAGE_MODEL = 'gemini-2.5-flash-image'
-/** ElevenLabs premade voice; clear, warm narration. */
-export const VOICE_ID = 'JBFqnCBsd6RMkjVDRZzb'
 
 const JOB_DEADLINE_MS = 8 * 60 * 1000
 
@@ -66,96 +70,75 @@ async function generateStory(p: GenerateStoryPayload, ctx: JobContext, env: Env)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error(`[story ${p.storyId}] writing failed: ${message}`)
+    const outOfCredits = /insufficient_credits|credits/i.test(message)
     await patch({
       status: 'failed',
       progressMessage: '',
-      error: 'The story writer got stuck. Please try a new story.',
+      error: outOfCredits
+        ? 'StorySprout is out of story magic for now. Please come back another day!'
+        : 'The story writer got stuck. Please try a new story.',
     })
     throw err
   }
   checkAlive()
-  const questions: Question[] = draft.questions
-  const soundWords: SoundWord[] = draft.soundWords
   await patch({
     title: draft.title,
     paragraphs: draft.paragraphs,
-    questions,
-    soundWords,
-    imageAlts: draft.illustrations.map((i) => i.alt),
-    imageSlots: draft.illustrations.map((i) => i.afterParagraph),
+    questions: draft.questions,
+    checkpoints: draft.checkpoints,
+    soundWords: [],
+    imageAlts: draft.panels.map((pn) => pn.alt),
+    imageSlots: [],
+    imageLayout: 'grid3x3',
     wordCount: countWords(draft.paragraphs),
     status: 'illustrating',
     progressMessage: 'Painting the pictures…',
   })
   ctx.progress(0.4, 'illustrating')
 
-  // ── 2. Pictures (in parallel; a failed one leaves a gap, not an error) ──
-  const imagePaths = await Promise.all(
-    draft.illustrations.map(async (ill, i) => {
+  // ── 2. One grid image of nine page pictures (a failure leaves none) ──────
+  const imagePaths: string[] = []
+  try {
+    const r = await tools.integration<{ base64Images: string[] }>('gemini/generate-image', {
+      model: IMAGE_MODEL,
+      prompt: panelGridPrompt(draft.characters, draft.panels.map((pn) => pn.scene)),
+      // 3 columns x 3 rows of square panels.
+      aspectRatio: '1:1',
+    })
+    if (!r.success) throw new Error(r.error)
+    const first = r.data.base64Images?.[0]
+    if (!first) throw new Error('no image returned')
+    const { bytes, type } = decodeDataUrl(first, 'image/png')
+    const ext = type.includes('jpeg') ? 'jpg' : type.split('/')[1] || 'png'
+    const stored = await files.upload(new Blob([bytes], { type }), {
+      key: `stories/${p.storyId}/panels.${ext}`,
+      name: `panels.${ext}`,
+    })
+    imagePaths.push(stored.path)
+  } catch (err) {
+    console.error(`[story ${p.storyId}] panel grid failed: ${String(err)}`)
+  }
+  checkAlive()
+  await patch({ imagePaths, status: 'recording', progressMessage: 'Recording the tricky words…' })
+  ctx.progress(0.75, 'recording')
+
+  // ── 3. Hope says each in-book phonics word ──────────────────────────────
+  const checkpoints = await Promise.all(
+    draft.checkpoints.map(async (q, i) => {
       try {
-        const r = await tools.integration<{ base64Images: string[] }>('gemini/generate-image', {
-          model: IMAGE_MODEL,
-          prompt: illustrationPrompt(ill.prompt),
-          aspectRatio: '4:3',
-        })
-        if (!r.success) throw new Error(r.error)
-        const first = r.data.base64Images?.[0]
-        if (!first) throw new Error('no image returned')
-        const { bytes, type } = decodeDataUrl(first, 'image/png')
-        const ext = type.includes('jpeg') ? 'jpg' : type.split('/')[1] || 'png'
-        const stored = await files.upload(new Blob([bytes], { type }), {
-          key: `stories/${p.storyId}/picture-${i + 1}.${ext}`,
-          name: `picture-${i + 1}.${ext}`,
-        })
-        return stored.path
+        // Said twice with a pause: once to hear it, once to say it along.
+        const clip = await recordSpeech(tools, `${q.word}. ... ${q.word}.`)
+        const stored = await files.upload(clip, { key: `stories/${p.storyId}/phonics-${i + 1}.mp3`, name: `phonics-${i + 1}.mp3` })
+        return { ...q, audioPath: stored.path }
       } catch (err) {
-        console.error(`[story ${p.storyId}] picture ${i + 1} failed: ${String(err)}`)
-        return ''
+        // The reader falls back to the shared tapped-word cache (sayWord).
+        console.error(`[story ${p.storyId}] phonics audio ${i + 1} failed: ${String(err)}`)
+        return q
       }
     }),
   )
-  checkAlive()
-  await patch({ imagePaths, status: 'recording', progressMessage: 'Recording the practice words…' })
-  ctx.progress(0.75, 'recording')
 
-  // ── 3. Voices for the phonics word and the sound-it-out words ───────────
-  const say = async (word: string, slot: string): Promise<string | undefined> => {
-    try {
-      const r = await tools.integration<{ audioUrl: string }>('elevenlabs/generate-speech', {
-        // Said twice with a pause: once to hear it, once to say it along.
-        text: `${word}. ... ${word}.`,
-        voice_id: VOICE_ID,
-        model_id: 'eleven_multilingual_v2',
-        output_format: 'mp3_44100_64',
-        voice_settings: { stability: 0.7, similarity_boost: 0.75, style: 0, use_speaker_boost: true },
-      })
-      if (!r.success) throw new Error(r.error)
-      const { bytes, type } = decodeDataUrl(r.data.audioUrl, 'audio/mpeg')
-      const stored = await files.upload(new Blob([bytes], { type }), {
-        key: `stories/${p.storyId}/${slot}.mp3`,
-        name: `${slot}.mp3`,
-      })
-      return stored.path
-    } catch (err) {
-      console.error(`[story ${p.storyId}] audio ${slot} failed: ${String(err)}`)
-      return undefined
-    }
-  }
-  const [withAudio, wordsWithAudio] = await Promise.all([
-    Promise.all(
-      questions.map(async (q, i) =>
-        q.kind === 'phonics' ? { ...q, audioPath: await say(q.word, `phonics-${i}`) } : q,
-      ),
-    ),
-    Promise.all(soundWords.map(async (w, i) => ({ ...w, audioPath: await say(w.word, `word-${i}`) }))),
-  ])
-
-  await patch({
-    questions: withAudio,
-    soundWords: wordsWithAudio,
-    status: 'ready',
-    progressMessage: '',
-  })
+  await patch({ checkpoints, status: 'ready', progressMessage: '' })
   ctx.progress(1, 'ready')
   return { storyId: p.storyId, pictures: imagePaths.filter(Boolean).length }
 }
@@ -177,7 +160,10 @@ async function writeStory(tools: ActionTools, p: GenerateStoryPayload): Promise<
       system: SYSTEM_PROMPT,
       messages,
     })
-    if (!r.success) throw new Error(`Claude call failed: ${r.error}`)
+    if (!r.success) {
+      const code = (r as { code?: string }).code ?? 'error'
+      throw new Error(`Claude call failed [${code}]: ${r.error}`)
+    }
     const text = replyText(r.data)
     try {
       return parseStoryDraft(extractJson(text))

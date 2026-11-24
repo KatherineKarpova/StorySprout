@@ -11,8 +11,13 @@
 import { appFiles, enqueueJob } from 'deepspace/worker'
 import type { ActionHandler, ActionTools } from 'deepspace/worker'
 import type { Env } from '../../worker'
-import { DAILY_STORY_LIMIT, type StoryRecord } from '../story/catalog'
-import { normalizeRequest } from '../story/prompts'
+import { APP_DAILY_STORY_LIMIT, DAILY_STORY_LIMIT, type StoryRecord } from '../story/catalog'
+import { normalizeRequest, normalizeWord, wordClipId } from '../story/prompts'
+import { VOICE_ID, recordSpeech } from '../story/voice'
+
+/** New (uncached) word recordings, per UTC day. ~$0.005 each on the free tier. */
+const WORDS_PER_READER_PER_DAY = 50
+const WORDS_PER_APP_PER_DAY = 150
 
 export const GENERATE_STORY_JOB = 'generate-story'
 
@@ -22,7 +27,7 @@ export interface GenerateStoryPayload {
   userId: string
   grade: 1 | 2 | 3
   interests: string[]
-  custom: string
+  custom: string[]
 }
 
 interface StoryRow {
@@ -77,25 +82,52 @@ export const actions: Record<string, ActionHandler<Env>> = {
       }
     }
     const today = new Date().toISOString().slice(0, 10)
-    const madeToday = recent.filter((s) => (s.createdAt ?? '').startsWith(today)).length
-    if (madeToday >= DAILY_STORY_LIMIT) {
+    // A story that failed is not the reader's fault, so it does not use up
+    // their day; the app-wide cap below still counts it (it may have cost).
+    const madeToday = recent.filter(
+      (s) => (s.createdAt ?? '').startsWith(today) && s.data.status !== 'failed',
+    ).length
+    // The owner pays for every story and tests the app, so the per-reader cap
+    // does not apply to them; the app-wide cap below still does.
+    const isOwner = !!env.OWNER_USER_ID && userId === env.OWNER_USER_ID
+    if (!isOwner && madeToday >= DAILY_STORY_LIMIT) {
       return {
         success: false,
         error: `That's ${DAILY_STORY_LIMIT} new stories today! Re-read a favorite and come back tomorrow.`,
+      }
+    }
+    // App-wide ceiling: the owner pays for every reader, so the total matters
+    // more than any one reader's share. Newest-first, so one page covers today.
+    const all = await tools.query('stories', {
+      orderBy: 'createdAt',
+      orderDir: 'desc',
+      limit: APP_DAILY_STORY_LIMIT + 1,
+    })
+    if (!all.success) return { success: false, error: 'Could not check today’s stories. Please try again.' }
+    const appToday = (all.data as { records: StoryRow[] }).records.filter((s) =>
+      (s.createdAt ?? '').startsWith(today),
+    ).length
+    if (appToday >= APP_DAILY_STORY_LIMIT) {
+      console.warn(`[startStory] app daily limit reached (${appToday}/${APP_DAILY_STORY_LIMIT})`)
+      return {
+        success: false,
+        error: 'StorySprout has written all its stories for today. Re-read one on your bookshelf and come back tomorrow!',
       }
     }
 
     const initial: StoryRecord = {
       title: '',
       grade: req.grade,
-      interests: [...req.interests, ...(req.custom ? [req.custom] : [])],
+      interests: [...req.interests, ...req.custom],
       status: 'queued',
       progressMessage: 'Getting the story ready…',
       paragraphs: [],
       imagePaths: [],
       imageAlts: [],
       imageSlots: [],
+      imageLayout: '',
       questions: [],
+      checkpoints: [],
       soundWords: [],
       wordCount: 0,
       error: '',
@@ -119,6 +151,55 @@ export const actions: Record<string, ActionHandler<Env>> = {
       return { success: false, error: 'Could not start the story writer. Please try again.' }
     }
     return { success: true, data: { storyId } }
+  },
+
+  /**
+   * Hope says one tapped word. Recorded the first time anyone taps that word,
+   * then served from the app-wide cache (word_clips + public R2 file) for
+   * free, so the common words of every story are paid for once, ever. New
+   * recordings are capped per reader and app-wide per day; a cache hit is
+   * never capped.
+   */
+  sayWord: async ({ userId, params, tools, env }) => {
+    if (userId.startsWith('anon-')) return { success: false, error: 'Sign in to hear words.' }
+    const word = normalizeWord(params.word)
+    if (!word) return { success: false, error: 'That is not a word I can say.' }
+    const id = `${VOICE_ID}-${wordClipId(word)}`
+
+    const cached = await tools.get('word_clips', id)
+    if (cached.success) {
+      const path = (cached.data as { record: { data: { path?: string } } }).record.data.path
+      if (path) return { success: true, data: { word, path, cached: true } }
+    }
+
+    const day = new Date().toISOString().slice(0, 10)
+    const [mine, everyone] = await Promise.all([
+      tools.query('usage', { where: { userId, day, kind: 'word' }, limit: WORDS_PER_READER_PER_DAY + 1 }),
+      tools.query('usage', { where: { day, kind: 'word' }, limit: WORDS_PER_APP_PER_DAY + 1 }),
+    ])
+    if (!mine.success || !everyone.success) return { success: false, error: 'Please try that word again.' }
+    const count = (r: typeof mine) => (r.success ? (r.data as { records: unknown[] }).records.length : 0)
+    if (count(mine) >= WORDS_PER_READER_PER_DAY || count(everyone) >= WORDS_PER_APP_PER_DAY) {
+      console.warn(`[sayWord] daily word limit reached caller=${userId}`)
+      return { success: false, error: 'Hope needs a rest! Try sounding this one out, and tap again tomorrow.' }
+    }
+    // Count before spending, so a burst of taps cannot slip past the cap.
+    await tools.create('usage', { userId, day, kind: 'word' })
+
+    try {
+      const clip = await recordSpeech(tools, `${word}.`)
+      // App scope: public, shared by every reader. A pronunciation is not
+      // private data, and sharing it is what makes the cache work.
+      const stored = await appFiles(env, { scope: 'app', userId }).upload(clip, {
+        key: `words/${VOICE_ID}/${wordClipId(word)}.mp3`,
+        name: `${word}.mp3`,
+      })
+      await tools.create('word_clips', { word, voiceId: VOICE_ID, path: stored.path }, id)
+      return { success: true, data: { word, path: stored.path, cached: false } }
+    } catch (err) {
+      console.error(`[sayWord] "${word}" failed: ${String(err)}`)
+      return { success: false, error: 'Hope could not say that word right now.' }
+    }
   },
 
   /** Delete a story and the pictures and audio stored for it. */

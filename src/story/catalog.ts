@@ -71,7 +71,16 @@ export const INTERESTS: Interest[] = [
 export const MAX_INTERESTS = 3
 export const MAX_CUSTOM_INTEREST_LENGTH = 60
 /** Stories each signed-in user may start per UTC day. Owner credits pay for them. */
-export const DAILY_STORY_LIMIT = 5
+export const DAILY_STORY_LIMIT = 2
+/**
+ * Stories the whole app may start per UTC day, across every reader. This is
+ * the owner's spend ceiling: one story measured ~33 credits (≈ $0.33) in local
+ * testing (~25 after moving to Haiku and one grid image). The free tier's
+ * 500 credits do not renew, so during review the app allows 4 stories a day
+ * (~100 credits) across everyone. When credits run out calls are refused
+ * (insufficient_credits), not billed.
+ */
+export const APP_DAILY_STORY_LIMIT = 4
 
 export type StoryStatus = 'queued' | 'writing' | 'illustrating' | 'recording' | 'ready' | 'failed'
 
@@ -101,6 +110,15 @@ export interface ComprehensionQuestion {
 
 export type Question = PhonicsQuestion | ComprehensionQuestion
 
+/**
+ * A phonics question shown as its own page inside the book, about the
+ * longest, rarest, or hardest word in the ~100 words just read.
+ */
+export interface CheckpointQuestion extends PhonicsQuestion {
+  /** Paragraph index the question follows. */
+  afterParagraph: number
+}
+
 export interface SoundWord {
   word: string
   chunks: string[]
@@ -115,12 +133,22 @@ export interface StoryRecord {
   /** Human-readable stage for the reader while the job runs. */
   progressMessage: string
   paragraphs: string[]
-  /** Served paths, in story order. Empty until illustrated. */
+  /**
+   * Served image paths. With a grid imageLayout this is one sheet of panels
+   * (imageAlts has one alt per panel): 'grid3x3' is one picture per page,
+   * 'grid3x2' an earlier six-panel format; older stories hold a single
+   * picture. Empty until illustrated.
+   */
   imagePaths: string[]
+  imageLayout: '' | 'grid3x2' | 'grid3x3'
   imageAlts: string[]
   /** Paragraph index each picture follows, parallel to imagePaths. */
   imageSlots: number[]
+  /** End-of-story questions: three reading comprehension questions. */
   questions: Question[]
+  /** In-book phonics questions, about one per 100 words. */
+  checkpoints: CheckpointQuestion[]
+  /** Legacy: stories made before in-book phonics. New stories leave it empty. */
   soundWords: SoundWord[]
   wordCount: number
   error: string
@@ -128,7 +156,7 @@ export interface StoryRecord {
 
 export interface QuizAttemptRecord {
   storyId: string
-  /** Index of the chosen answer per question. */
+  /** Chosen answer per question: in-book checkpoints first, then the end quiz. */
   answers: number[]
   correct: number
   total: number

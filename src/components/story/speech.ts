@@ -1,42 +1,61 @@
 /**
- * Two ways the app speaks:
+ * Every sound in StorySprout is Hope's recorded voice (ElevenLabs, stored in
+ * R2). There is deliberately no browser speech-synthesis fallback: a
+ * different, robotic voice would undercut the one the child knows.
  *
- * - `playClip(path)`: a recorded ElevenLabs clip stored in R2. Used for the
- *   phonics answer and the sound-it-out words, where a clear, natural voice is
- *   the point of the exercise.
- * - `speak(text)`: the browser's built-in speech synthesis. Free and instant,
- *   so any word in the story can be tapped to hear it. Quality varies by
- *   device, which is why the quiz words get recorded audio instead.
+ * - Practice words arrive with a clip the story job recorded.
+ * - Any other tapped word goes through the `sayWord` action, which serves the
+ *   app-wide cache or records it once. Paths are memoized here, so a word is
+ *   fetched at most once per page load.
  */
 
-let current: HTMLAudioElement | null = null
+import { runAction } from '@/lib/actions'
 
+let current: HTMLAudioElement | null = null
+const known = new Map<string, string>()
+const pending = new Map<string, Promise<string>>()
+
+/** Play a clip; resolves when it finishes (or fails to play). */
 export function playClip(path: string): Promise<void> {
   stopAll()
   const audio = new Audio(path)
   current = audio
-  return audio.play().catch(() => undefined)
-}
-
-export function canSpeak(): boolean {
-  return typeof window !== 'undefined' && 'speechSynthesis' in window
-}
-
-export function speak(text: string, opts: { rate?: number; onEnd?: () => void } = {}): void {
-  if (!canSpeak()) return
-  stopAll()
-  const u = new SpeechSynthesisUtterance(text)
-  u.rate = opts.rate ?? 0.85
-  u.lang = 'en-US'
-  if (opts.onEnd) {
-    u.onend = opts.onEnd
-    u.onerror = opts.onEnd
-  }
-  window.speechSynthesis.speak(u)
+  return new Promise((resolve) => {
+    audio.onended = () => resolve()
+    audio.onerror = () => resolve()
+    audio.play().catch(() => resolve())
+  })
 }
 
 export function stopAll(): void {
   current?.pause()
   current = null
-  if (canSpeak()) window.speechSynthesis.cancel()
+}
+
+const keyOf = (word: string) => word.toLowerCase().replace(/[^\p{L}'-]/gu, '')
+
+async function clipFor(word: string): Promise<string> {
+  const key = keyOf(word)
+  const hit = known.get(key)
+  if (hit) return hit
+  let p = pending.get(key)
+  if (!p) {
+    p = runAction<{ path: string }>('sayWord', { word }).then((r) => {
+      pending.delete(key)
+      if (!r.success) throw new Error(r.error)
+      known.set(key, r.data.path)
+      return r.data.path
+    })
+    pending.set(key, p)
+  }
+  return p
+}
+
+/**
+ * Say `word` in Hope's voice. `path` is a clip already recorded for it
+ * (practice words). Rejects with a child-friendly message on failure.
+ */
+export async function hearWord(word: string, path?: string): Promise<void> {
+  if (path) known.set(keyOf(word), path)
+  await playClip(path ?? (await clipFor(word)))
 }

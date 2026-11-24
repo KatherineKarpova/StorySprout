@@ -6,6 +6,7 @@
 import { Link } from 'react-router-dom'
 import { Seo } from '../components/Seo'
 import { seo } from '../seo'
+import { Logo } from '../components/Logo'
 
 const STEPS = [
   {
@@ -16,12 +17,12 @@ const STEPS = [
   {
     emoji: '📖',
     title: 'Read a brand-new story',
-    body: 'About 500 words with two illustrations, written for that reading level. Tap any word to hear it.',
+    body: 'About 500 words and a picture, laid out like a real book. Tap any word to hear it said.',
   },
   {
     emoji: '🗣️',
     title: 'Say it, then show what you know',
-    body: 'A phonics question with a recorded pronunciation, then reading comprehension questions with stars.',
+    body: 'Every 100 words or so, a phonics question about the trickiest word. Then three comprehension questions, with stars.',
   },
 ]
 
@@ -32,7 +33,7 @@ export default function Landing() {
       <div data-testid="static-landing" className="min-h-screen bg-background">
         <header className="mx-auto flex max-w-5xl items-center justify-between px-5 py-5">
           <span className="font-display flex items-center gap-1.5 text-2xl font-semibold text-primary">
-            <span aria-hidden>🌱</span> StorySprout
+            <Logo className="h-9 w-9" /> StorySprout
           </span>
           <Link to="/home" className="rounded-full px-4 py-2 text-[15px] font-semibold text-foreground hover:bg-muted">
             Sign in
@@ -57,7 +58,9 @@ export default function Landing() {
                 >
                   Make a story
                 </Link>
-                <span className="text-[15px] text-muted-foreground">Free · a grown-up signs in once</span>
+                <Link to="/demo" className="inline-flex h-14 items-center rounded-full border-2 border-primary px-7 text-lg font-semibold text-primary hover:bg-primary/5">
+                  Read a sample story
+                </Link>
               </div>
             </div>
 

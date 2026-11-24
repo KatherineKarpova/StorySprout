@@ -11,7 +11,8 @@
 import { useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { AuthOverlay, useAuthProfileReady, signOut } from 'deepspace'
-import { ChevronDown, LogOut, Menu, Sprout, X } from 'lucide-react'
+import { ChevronDown, LogOut, Menu, X } from 'lucide-react'
+import { Logo } from './Logo'
 import type { Role } from '../constants'
 import { nav } from '../nav'
 import { cn } from '../lib/utils'
@@ -71,7 +72,7 @@ export default function Navigation() {
       <nav data-testid="app-navigation" className="border-b border-border bg-background">
         <div className="mx-auto flex h-16 max-w-5xl items-center gap-4 px-4">
           <Link to="/home" className="font-display flex items-center gap-1.5 text-xl font-semibold text-primary">
-            <Sprout className="h-6 w-6" aria-hidden />
+            <Logo className="h-8 w-8" />
             StorySprout
           </Link>
 

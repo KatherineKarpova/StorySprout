@@ -9,6 +9,8 @@ import { Link } from 'react-router-dom'
 import { AuthOverlay, useAuthProfileReady, useQuery } from 'deepspace'
 import { Plus, Star } from 'lucide-react'
 import { Button } from '@/components/ui'
+import { Panel } from '@/components/story/Panel'
+import { gridFor } from '@/story/panels'
 import { cn } from '@/lib/utils'
 import { DAILY_STORY_LIMIT, interestLabel, levelFor, type QuizAttemptRecord, type StoryRecord } from '@/story/catalog'
 
@@ -51,7 +53,11 @@ function Shelf() {
   }, [attempts])
 
   const today = new Date().toISOString().slice(0, 10)
-  const left = Math.max(0, DAILY_STORY_LIMIT - stories.filter((s) => s.createdAt.startsWith(today)).length)
+  // Mirrors startStory: failed stories do not use up the reader's day.
+  const left = Math.max(
+    0,
+    DAILY_STORY_LIMIT - stories.filter((s) => s.createdAt.startsWith(today) && s.data.status !== 'failed').length,
+  )
   const stars = [...best.values()].reduce((n, b) => n + b.correct, 0)
 
   return (
@@ -113,7 +119,10 @@ function Shelf() {
                   className="group block overflow-hidden rounded-3xl border-2 border-border bg-card transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-[0_12px_28px_-12px_rgba(90,60,20,0.3)]"
                 >
                   <div className="aspect-[4/3] bg-muted">
-                    {cover ? (
+                    {cover && gridFor(s.imageLayout) ? (
+                      // Cover = the story's first panel, cropped from its sheet.
+                      <Panel src={cover} grid={gridFor(s.imageLayout)!} index={0} alt="" className="mx-auto aspect-square h-full" />
+                    ) : cover ? (
                       <img src={cover} alt="" className="h-full w-full object-cover" loading="lazy" />
                     ) : (
                       <div className={cn('flex h-full items-center justify-center text-5xl', cooking && 'sprout-shimmer')} aria-hidden>
@@ -125,10 +134,12 @@ function Shelf() {
                     <p className="text-sm font-semibold text-coral">
                       {levelFor(s.grade).label}
                       {cooking && ' · being made…'}
-                      {s.status === 'failed' && ' · got stuck'}
+                      {s.status === 'failed' && ' · didn’t work'}
                     </p>
                     <p className="mt-0.5 font-display text-xl font-semibold leading-snug text-foreground">
-                      {s.title || (s.interests ?? []).map(interestLabel).join(' & ') || 'New story'}
+                      {s.status === 'failed'
+                        ? `Oops! The ${(s.interests ?? []).map(interestLabel).join(' & ') || 'story'} story got stuck`
+                        : s.title || (s.interests ?? []).map(interestLabel).join(' & ') || 'New story'}
                     </p>
                     {score ? (
                       <p className="mt-2 flex items-center gap-0.5" aria-label={`${score.correct} of ${score.total} stars`}>
