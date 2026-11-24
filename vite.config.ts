@@ -7,6 +7,16 @@ import checker from 'vite-plugin-checker'
 import { deepspaceBuild } from 'deepspace/build'
 import { prerender } from './prerender.ts'
 
+// Windows: a shell can start Node in "c:\..." (Git Bash does) while module
+// URLs resolve to "C:\...". The bundler then treats one file as two modules:
+// a production build carried two copies of react-router, so components in a
+// lazy chunk read an empty router context and crashed live ("Cannot
+// destructure property 'basename' of useContext(...)"). Same directory,
+// canonical drive letter, before anything resolves a path.
+if (process.platform === 'win32' && /^[a-z]:/.test(process.cwd())) {
+  process.chdir(process.cwd()[0].toUpperCase() + process.cwd().slice(1))
+}
+
 const appDir = fileURLToPath(new URL('.', import.meta.url))
 
 export default defineConfig({
@@ -49,25 +59,6 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
-    },
-  },
-  environments: {
-    client: {
-      build: {
-        rolldownOptions: {
-          output: {
-            // One shared chunk for the router. Without it the production
-            // bundler copied react-router's module into the lazy Reader
-            // chunk as well as the entry chunk; the Reader's <Link> then
-            // read its own copy's (empty) router context and crashed with
-            // "Cannot destructure property 'basename' of useContext(...)".
-            // Dev serves one module instance, so this only showed live.
-            codeSplitting: {
-              groups: [{ name: 'router', test: /node_modules[\\/](react-router|react-router-dom|@generouted)[\\/]/ }],
-            },
-          },
-        },
-      },
     },
   },
   optimizeDeps: {
