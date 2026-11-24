@@ -91,6 +91,15 @@ export const DAILY_STORY_LIMIT = 2
  */
 export const APP_DAILY_STORY_LIMIT = 4
 
+/**
+ * startStory's error code when the owner is not paying right now (credits
+ * ran out today, or switched off): the picker then offers to make the story
+ * with the reader's own DeepSpace credits.
+ */
+export const OWNER_NOT_PAYING = 'owner_not_paying'
+/** What a reader-paid story roughly costs, shown before they agree. */
+export const READER_COST_ESTIMATE: Record<number, string> = { 1: 'about 10 credits', 2: 'about 15 credits', 3: 'about 15 credits' }
+
 /** Nodes in a story tree: one choice for grade 1, two for grades 2-3. */
 export function nodeCountFor(grade: number): 3 | 7 {
   return grade === 1 ? 3 : 7
@@ -170,6 +179,8 @@ export interface StoryRecord {
   imageAlts: string[]
   /** Picture-library entry this story's pictures came from or were saved as. */
   libraryId: string
+  /** Who paid: the app owner (default) or the reader's own DeepSpace credits. */
+  paidBy?: 'owner' | 'reader'
   /** The illustrator's character sheet and per-panel scenes, kept so the
    *  pictures can be redrawn later (older stories have neither). */
   characters?: string

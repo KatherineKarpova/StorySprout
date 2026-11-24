@@ -1,6 +1,6 @@
 import { getAuthToken } from 'deepspace'
 
-export type ActionResponse<T> = { success: true; data: T } | { success: false; error: string }
+export type ActionResponse<T> = { success: true; data: T } | { success: false; error: string; code?: string }
 
 /** POST /api/actions/<name> with the signed-in reader's token. */
 export async function runAction<T>(name: string, body: object): Promise<ActionResponse<T>> {

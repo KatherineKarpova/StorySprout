@@ -60,7 +60,13 @@ const JOB_DEADLINE_MS = 8 * 60 * 1000
 
 export async function runJob(job: Job, ctx: JobContext, env: Env): Promise<unknown> {
   if (job.type === GENERATE_STORY_JOB) {
-    return generateStory(job.payload as GenerateStoryPayload, ctx, env)
+    const p = job.payload as GenerateStoryPayload
+    return generateStory(p, env, {
+      tools: createActionTools(env, p.userId, ''),
+      progress: (v, m) => ctx.progress(v, m),
+      signal: ctx.signal,
+      paidBy: 'owner',
+    })
   }
   throw new Error(`Unknown job type: ${job.type}`)
 }
@@ -105,8 +111,30 @@ async function findLibrarySheet(tools: ActionTools, p: GenerateStoryPayload): Pr
   return fresh.length ? fresh[Math.floor(Math.random() * fresh.length)] : null
 }
 
-async function generateStory(p: GenerateStoryPayload, ctx: JobContext, env: Env) {
-  const tools = createActionTools(env, p.userId, '')
+/**
+ * Who runs the pipeline and who pays: the job (owner's credits, owner JWT) or
+ * the `writeMyStory` action (the reader's own credits, their JWT, only after
+ * they agreed). Same steps either way.
+ */
+export interface StoryRun {
+  tools: ActionTools
+  progress: (value: number, message?: string) => void
+  signal: AbortSignal
+  paidBy: 'owner' | 'reader'
+}
+
+const OUT_OF_CREDITS = /insufficient_credits|out of credits|credits/i
+
+/** Remember (per UTC day) that the owner's credits ran out, so the next
+ *  story offers the reader's own credits instead of failing again. */
+export const ownerOutKey = (day: string) => `owner-out-${day}`
+async function markOwnerOut(tools: ActionTools) {
+  const day = new Date().toISOString().slice(0, 10)
+  await tools.create('usage', { userId: 'owner', day, kind: 'owner_out' }, ownerOutKey(day))
+}
+
+export async function generateStory(p: GenerateStoryPayload, env: Env, run: StoryRun) {
+  const { tools } = run
   const privateFiles = appFiles(env, { scope: 'self', userId: p.userId })
   const deadline = Date.now() + JOB_DEADLINE_MS
   const patch = async (data: Partial<StoryRecord>) => {
@@ -114,7 +142,7 @@ async function generateStory(p: GenerateStoryPayload, ctx: JobContext, env: Env)
     if (!r.success) console.error(`[story ${p.storyId}] record update failed: ${r.error}`)
   }
   const checkAlive = () => {
-    if (ctx.signal.aborted) throw new Error('Canceled')
+    if (run.signal.aborted) throw new Error('Canceled')
     if (Date.now() > deadline) throw new Error('Took too long')
   }
 
@@ -122,7 +150,7 @@ async function generateStory(p: GenerateStoryPayload, ctx: JobContext, env: Env)
   let draft: StoryDraft
   let reused: LibraryRow | null = null
   try {
-    ctx.progress(0.05, 'writing')
+    run.progress(0.05, 'writing')
     await patch({ status: 'writing', progressMessage: 'Writing your adventure…' })
     reused = await findLibrarySheet(tools, p)
     const existing: ExistingPictures | undefined = reused
@@ -132,13 +160,16 @@ async function generateStory(p: GenerateStoryPayload, ctx: JobContext, env: Env)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error(`[story ${p.storyId}] writing failed: ${message}`)
-    const outOfCredits = /insufficient_credits|credits/i.test(message)
+    const outOfCredits = OUT_OF_CREDITS.test(message)
+    if (outOfCredits && run.paidBy === 'owner') await markOwnerOut(tools)
     await patch({
       status: 'failed',
       progressMessage: '',
-      error: outOfCredits
-        ? 'StorySprout is out of story magic for now. Please come back another day!'
-        : 'The story writer got stuck. Please try a new story.',
+      error: !outOfCredits
+        ? 'The story writer got stuck. Please try a new story.'
+        : run.paidBy === 'owner'
+          ? "StorySprout's free stories are used up for now. Tap Try again to make it with your own DeepSpace credits."
+          : 'Your DeepSpace account is out of credits, so this story could not be made.',
     })
     throw err
   }
@@ -161,7 +192,7 @@ async function generateStory(p: GenerateStoryPayload, ctx: JobContext, env: Env)
     status: reused ? 'recording' : 'illustrating',
     progressMessage: reused ? 'Recording the tricky words…' : 'Painting the pictures…',
   })
-  ctx.progress(0.4, reused ? 'recording' : 'illustrating')
+  run.progress(0.4, reused ? 'recording' : 'illustrating')
 
   // ── 2. One grid image of every panel (a failure leaves none) ─────────────
   if (!reused) {
@@ -211,10 +242,11 @@ async function generateStory(p: GenerateStoryPayload, ctx: JobContext, env: Env)
       }
     } catch (err) {
       console.error(`[story ${p.storyId}] picture sheet failed: ${String(err)}`)
+      if (run.paidBy === 'owner' && OUT_OF_CREDITS.test(String(err))) await markOwnerOut(tools)
     }
     checkAlive()
     await patch({ status: 'recording', progressMessage: 'Recording the tricky words…' })
-    ctx.progress(0.75, 'recording')
+    run.progress(0.75, 'recording')
   }
 
   // ── 3. Hope says each node's phonics word ────────────────────────────────
@@ -238,7 +270,7 @@ async function generateStory(p: GenerateStoryPayload, ctx: JobContext, env: Env)
   )
 
   await patch({ nodes, status: 'ready', progressMessage: '' })
-  ctx.progress(1, 'ready')
+  run.progress(1, 'ready')
   return { storyId: p.storyId, reusedPictures: !!reused }
 }
 

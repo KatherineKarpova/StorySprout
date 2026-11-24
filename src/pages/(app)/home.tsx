@@ -4,11 +4,12 @@
  * friendly invitation instead of a bare gate.
  */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AuthOverlay, useAuthProfileReady, useQuery } from 'deepspace'
 import { Plus, Star } from 'lucide-react'
-import { Button } from '@/components/ui'
+import { Button, Switch } from '@/components/ui'
+import { runAction } from '@/lib/actions'
 import { Panel } from '@/components/story/Panel'
 import { gridFor } from '@/story/panels'
 import { coverPanel } from '@/story/tree'
@@ -16,7 +17,7 @@ import { cn } from '@/lib/utils'
 import { DAILY_STORY_LIMIT, interestLabel, levelFor, type QuizAttemptRecord, type StoryRecord } from '@/story/catalog'
 
 export default function HomePage() {
-  const { isSignedIn, isLoaded } = useAuthProfileReady({ requireUser: true })
+  const { isSignedIn, isLoaded, user } = useAuthProfileReady({ requireUser: true })
   const [showAuth, setShowAuth] = useState(false)
 
   if (!isLoaded) return null
@@ -37,7 +38,13 @@ export default function HomePage() {
       </div>
     )
   }
-  return <Shelf />
+  return (
+    <>
+      {/* The app owner is always an admin; the actions re-check ownership. */}
+      {user?.role === 'admin' && <WhoPays />}
+      <Shelf />
+    </>
+  )
 }
 
 function Shelf() {
@@ -165,6 +172,54 @@ function Shelf() {
           })}
         </ul>
       )}
+    </div>
+  )
+}
+
+/**
+ * Owner tools: switch new stories between "I pay" (default) and "readers use
+ * their own DeepSpace credits", and see whether the credits ran out today
+ * (which flips readers to their own credits until tomorrow or a switch-back).
+ */
+function WhoPays() {
+  const [state, setState] = useState<{ readersPay: boolean; outOfCreditsToday: boolean } | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    let live = true
+    runAction<{ readersPay: boolean; outOfCreditsToday: boolean }>('ownerSettings', {}).then((r) => {
+      if (live && r.success) setState(r.data)
+    })
+    return () => {
+      live = false
+    }
+  }, [])
+
+  async function toggle(on: boolean) {
+    setBusy(true)
+    const r = await runAction<{ readersPay: boolean }>('setReadersPay', { on })
+    setBusy(false)
+    if (r.success) setState({ readersPay: r.data.readersPay, outOfCreditsToday: on ? (state?.outOfCreditsToday ?? false) : false })
+  }
+
+  if (!state) return null
+  const readersPay = state.readersPay || state.outOfCreditsToday
+  return (
+    <div className="mx-auto mt-6 flex max-w-5xl flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-dashed border-border px-4 py-3 text-[15px]">
+      <div>
+        <p className="font-semibold text-foreground">Owner tools · Who pays for new stories?</p>
+        <p className="text-muted-foreground">
+          {state.outOfCreditsToday
+            ? 'Your credits ran out today, so readers are asked to use their own. Switch off to try yours again.'
+            : readersPay
+              ? 'Readers are asked to use their own DeepSpace credits.'
+              : 'You pay (from your DeepSpace credits).'}
+        </p>
+      </div>
+      <label className="flex items-center gap-2 font-semibold text-foreground">
+        Readers use their own credits
+        <Switch checked={readersPay} disabled={busy} onCheckedChange={(on: boolean) => toggle(on)} />
+      </label>
     </div>
   )
 }

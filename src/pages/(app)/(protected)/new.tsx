@@ -16,6 +16,8 @@ import {
   INTERESTS,
   MAX_CUSTOM_INTEREST_LENGTH,
   MAX_INTERESTS,
+  OWNER_NOT_PAYING,
+  READER_COST_ESTIMATE,
   READING_LEVELS,
   type Grade,
 } from '@/story/catalog'
@@ -50,6 +52,8 @@ export default function NewStoryPage() {
   )
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
+  // Set when the owner is not paying: the request waiting for the reader's OK.
+  const [askToPay, setAskToPay] = useState<{ grade: Grade; interests: string[]; custom: string[] } | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const count = picked.length + customs.length
@@ -99,16 +103,29 @@ export default function NewStoryPage() {
     } catch {
       /* private mode: just don't remember */
     }
-    const r = await runAction<{ storyId: string }>('startStory', {
-      grade,
-      interests: picked,
-      custom: ideas,
-    })
+    await start({ grade, interests: picked, custom: ideas }, false)
+  }
+
+  /**
+   * Ask the server for a story. When the owner is not paying right now, it
+   * answers OWNER_NOT_PAYING and we ask the reader before spending their own
+   * credits; with `mine`, the reader-paid story is written by writeMyStory
+   * (not awaited: it runs about a minute while the story page fills in).
+   */
+  async function start(request: { grade: Grade; interests: string[]; custom: string[] }, mine: boolean) {
+    setBusy(true)
+    setError(null)
+    const r = await runAction<{ storyId: string; paidBy?: string }>('startStory', { ...request, useMyCredits: mine })
     if (!r.success) {
       setBusy(false)
+      if (r.code === OWNER_NOT_PAYING) {
+        setAskToPay(request)
+        return
+      }
       setError(r.error)
       return
     }
+    if (r.data.paidBy === 'reader') void runAction('writeMyStory', { storyId: r.data.storyId })
     navigate(`/story/${r.data.storyId}`)
   }
 
@@ -263,6 +280,29 @@ export default function NewStoryPage() {
         </Button>
         {!grade && <p className="text-[15px] text-muted-foreground">First, pick how you read.</p>}
         {grade && !hasTopic && <p className="text-[15px] text-muted-foreground">Now pick something you like.</p>}
+        {askToPay && (
+          <div role="alertdialog" aria-label="Use your own credits?" className="w-full max-w-xl rounded-2xl border-2 border-coral bg-secondary p-5 text-secondary-foreground">
+            <p className="font-display text-lg font-semibold">StorySprout's free stories are used up for now.</p>
+            <p className="mt-1 text-[15px]">
+              A grown-up can make this story with your own DeepSpace credits ({READER_COST_ESTIMATE[askToPay.grade]}).
+              Nothing is spent unless you say yes.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <Button
+                type="button"
+                loading={busy}
+                data-testid="use-my-credits"
+                className="rounded-full px-6 font-semibold"
+                onClick={() => start(askToPay, true).then(() => setAskToPay(null))}
+              >
+                Yes, use my credits
+              </Button>
+              <Button type="button" variant="ghost" className="rounded-full" onClick={() => setAskToPay(null)}>
+                Not now
+              </Button>
+            </div>
+          </div>
+        )}
         {error && (
           <p role="alert" className="rounded-xl bg-secondary px-4 py-3 text-[15px] font-semibold text-secondary-foreground">
             {error}

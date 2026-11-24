@@ -74,7 +74,17 @@ export function registerActionRoutes(app: Hono<AppContext>, resolveAuth: Resolve
  * owner-billed integrations through the same audited path as actions. The job
  * passes an empty `callerJwt`: every integration it uses is 'developer'-billed.
  */
-export function createActionTools(env: Env, userId: string, callerJwt: string): ActionTools {
+export function createActionTools(
+  env: Env,
+  userId: string,
+  callerJwt: string,
+  /**
+   * StorySprout: bill every integration call to the signed-in caller, even
+   * ones configured as 'developer' (owner pays). Used only after the reader
+   * agreed to spend their own DeepSpace credits (src/actions `writeMyStory`).
+   */
+  opts: { billCaller?: boolean } = {},
+): ActionTools {
   const stub = env.RECORD_ROOMS.get(env.RECORD_ROOMS.idFromName(`app:${env.DEEPSPACE_APP_ID}`))
 
   // The DO returns ActionResult<unknown>; callers below supply the precise
@@ -113,7 +123,10 @@ export function createActionTools(env: Env, userId: string, callerJwt: string): 
 
     // The api-worker bills the JWT subject: owner for developer mode, caller
     // for user mode. It does not accept a client-supplied billing override.
-    const jwt = billingMode === 'developer' ? env.APP_OWNER_JWT : callerJwt
+    const jwt = billingMode === 'developer' && !opts.billCaller ? env.APP_OWNER_JWT : callerJwt
+    if (!jwt) {
+      return { success: false, code: 'not_authenticated', error: 'Sign in to use your own credits.' }
+    }
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${jwt}`,

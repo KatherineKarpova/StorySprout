@@ -9,9 +9,11 @@
  */
 
 import { appFiles, enqueueJob } from 'deepspace/worker'
-import type { ActionHandler, ActionTools } from 'deepspace/worker'
+import type { ActionHandler, ActionResult, ActionTools } from 'deepspace/worker'
 import type { Env } from '../../worker'
-import { APP_DAILY_STORY_LIMIT, DAILY_STORY_LIMIT, type StoryRecord } from '../story/catalog'
+import { APP_DAILY_STORY_LIMIT, DAILY_STORY_LIMIT, INTERESTS, OWNER_NOT_PAYING, type StoryRecord } from '../story/catalog'
+import { createActionTools } from '../server/action-routes'
+import { generateStory, ownerOutKey } from '../jobs'
 import { decodeDataUrl, normalizeRequest, normalizeWord, panelGridPrompt, wordClipId } from '../story/prompts'
 import { VOICE_ID, recordSpeech } from '../story/voice'
 
@@ -57,6 +59,17 @@ async function loadOwnStory(tools: ActionTools, userId: string, storyId: unknown
   return record.createdBy === userId ? record : null
 }
 
+/** Stories a reader may make per day with their own credits. */
+const READER_PAID_DAILY_LIMIT = 5
+const OWNER_PAUSED_ID = 'owner-paused'
+
+/** False when the owner switched paying off, or ran out of credits today. */
+async function ownerPaysNow(tools: ActionTools): Promise<boolean> {
+  const day = new Date().toISOString().slice(0, 10)
+  const [paused, out] = await Promise.all([tools.get('usage', OWNER_PAUSED_ID), tools.get('usage', ownerOutKey(day))])
+  return !paused.success && !out.success
+}
+
 const IN_PROGRESS = new Set(['queued', 'writing', 'illustrating', 'recording'])
 /** A job that has not finished in this long is treated as abandoned. */
 const STALE_MS = 10 * 60 * 1000
@@ -87,31 +100,50 @@ export const actions: Record<string, ActionHandler<Env>> = {
     const madeToday = recent.filter(
       (s) => (s.createdAt ?? '').startsWith(today) && s.data.status !== 'failed',
     ).length
+    // Who pays? The owner by default. When the owner's credits ran out today
+    // (or the owner switched paying off), the reader must agree to use their
+    // own DeepSpace credits first: the client asks, then resends with
+    // useMyCredits, and the story is written by `writeMyStory`, not the job.
+    const readerPays = params.useMyCredits === true
+    if (!readerPays && !(await ownerPaysNow(tools))) {
+      return {
+        success: false,
+        code: OWNER_NOT_PAYING,
+        error: "StorySprout's free stories are used up for now.",
+      } as ActionResult<never>
+    }
     // The owner pays for every story and tests the app, so the per-reader cap
     // does not apply to them; the app-wide cap below still does.
     const isOwner = !!env.OWNER_USER_ID && userId === env.OWNER_USER_ID
-    if (!isOwner && madeToday >= DAILY_STORY_LIMIT) {
-      return {
-        success: false,
-        error: `That's ${DAILY_STORY_LIMIT} new stories today! Re-read a favorite and come back tomorrow.`,
+    if (readerPays) {
+      // Their own money, but still a cap, so a stuck button cannot drain it.
+      if (madeToday >= READER_PAID_DAILY_LIMIT) {
+        return { success: false, error: `That's ${READER_PAID_DAILY_LIMIT} new stories today! Come back tomorrow.` }
       }
-    }
-    // App-wide ceiling: the owner pays for every reader, so the total matters
-    // more than any one reader's share. Newest-first, so one page covers today.
-    const all = await tools.query('stories', {
-      orderBy: 'createdAt',
-      orderDir: 'desc',
-      limit: APP_DAILY_STORY_LIMIT + 1,
-    })
-    if (!all.success) return { success: false, error: 'Could not check today’s stories. Please try again.' }
-    const appToday = (all.data as { records: StoryRow[] }).records.filter((s) =>
-      (s.createdAt ?? '').startsWith(today),
-    ).length
-    if (appToday >= APP_DAILY_STORY_LIMIT) {
-      console.warn(`[startStory] app daily limit reached (${appToday}/${APP_DAILY_STORY_LIMIT})`)
-      return {
-        success: false,
-        error: 'StorySprout has written all its stories for today. Re-read one on your bookshelf and come back tomorrow!',
+    } else {
+      if (!isOwner && madeToday >= DAILY_STORY_LIMIT) {
+        return {
+          success: false,
+          error: `That's ${DAILY_STORY_LIMIT} new stories today! Re-read a favorite and come back tomorrow.`,
+        }
+      }
+      // App-wide ceiling: the owner pays for every reader, so the total matters
+      // more than any one reader's share. Newest-first, so one page covers today.
+      const all = await tools.query('stories', {
+        orderBy: 'createdAt',
+        orderDir: 'desc',
+        limit: APP_DAILY_STORY_LIMIT + 1,
+      })
+      if (!all.success) return { success: false, error: 'Could not check today’s stories. Please try again.' }
+      const appToday = (all.data as { records: StoryRow[] }).records.filter(
+        (s) => (s.createdAt ?? '').startsWith(today) && s.data.paidBy !== 'reader',
+      ).length
+      if (appToday >= APP_DAILY_STORY_LIMIT) {
+        console.warn(`[startStory] app daily limit reached (${appToday}/${APP_DAILY_STORY_LIMIT})`)
+        return {
+          success: false,
+          error: 'StorySprout has written all its stories for today. Re-read one on your bookshelf and come back tomorrow!',
+        }
       }
     }
 
@@ -126,12 +158,15 @@ export const actions: Record<string, ActionHandler<Env>> = {
       imageAlts: [],
       imageLayout: '',
       libraryId: '',
+      paidBy: readerPays ? 'reader' : 'owner',
       wordCount: 0,
       error: '',
     }
     const created = await tools.create('stories', { ...initial })
     if (!created.success) return { success: false, error: created.error }
     const storyId = (created.data as { recordId: string }).recordId
+    // Reader-paid: the client now calls writeMyStory with its own token.
+    if (readerPays) return { success: true, data: { storyId, paidBy: 'reader' } }
 
     const payload: GenerateStoryPayload = { storyId, userId, ...req }
     try {
@@ -200,6 +235,68 @@ export const actions: Record<string, ActionHandler<Env>> = {
   },
 
   /** Delete a story and the pictures and audio stored for it. */
+  /**
+   * Write a reader-paid story (made by startStory with useMyCredits) with
+   * the reader's own token, so every paid call bills their DeepSpace
+   * credits. Runs inside this request (about a minute; the story page fills
+   * in live meanwhile) because a background job has no caller token, and the
+   * token is never stored. The story is claimed first so it runs once.
+   */
+  writeMyStory: async ({ userId, params, tools, env, callerJwt }) => {
+    if (typeof params.storyId !== 'string' || !params.storyId) return { success: false, error: 'Story not found.' }
+    const got = await tools.get('stories', params.storyId)
+    if (!got.success) return { success: false, error: 'Story not found.' }
+    const story = (got.data as { record: StoryRow }).record
+    if (story.createdBy !== userId || story.data.paidBy !== 'reader') return { success: false, error: 'Story not found.' }
+    if (story.data.status !== 'queued') return { success: false, error: 'This story is already being written.' }
+    await tools.update('stories', story.recordId, { status: 'writing' })
+
+    const known = new Set(INTERESTS.map((i) => i.id))
+    const interests = story.data.interests ?? []
+    const payload: GenerateStoryPayload = {
+      storyId: story.recordId,
+      userId,
+      grade: (story.data.grade ?? 1) as 1 | 2 | 3,
+      interests: interests.filter((i) => known.has(i)),
+      custom: interests.filter((i) => !known.has(i)),
+    }
+    try {
+      await generateStory(payload, env, {
+        tools: createActionTools(env, userId, callerJwt, { billCaller: true }),
+        progress: () => {},
+        signal: AbortSignal.timeout(8 * 60 * 1000),
+        paidBy: 'reader',
+      })
+    } catch (err) {
+      // generateStory already marked the story failed with a kid-friendly message.
+      console.error(`[writeMyStory] story=${story.recordId} failed: ${String(err)}`)
+      return { success: false, error: 'The story could not be finished.' }
+    }
+    return { success: true, data: { storyId: story.recordId } }
+  },
+
+  /** Owner only: does the owner pay for new stories right now, and why not. */
+  ownerSettings: async ({ userId, tools, env }) => {
+    if (!env.OWNER_USER_ID || userId !== env.OWNER_USER_ID) return { success: false, error: 'Owner only.' }
+    const day = new Date().toISOString().slice(0, 10)
+    const [paused, out] = await Promise.all([tools.get('usage', OWNER_PAUSED_ID), tools.get('usage', ownerOutKey(day))])
+    return { success: true, data: { readersPay: paused.success, outOfCreditsToday: out.success } }
+  },
+
+  /** Owner only: switch "readers use their own credits" on or off. */
+  setReadersPay: async ({ userId, params, tools, env }) => {
+    if (!env.OWNER_USER_ID || userId !== env.OWNER_USER_ID) return { success: false, error: 'Owner only.' }
+    const day = new Date().toISOString().slice(0, 10)
+    if (params.on === true) {
+      await tools.create('usage', { userId: 'owner', day, kind: 'owner_paused' }, OWNER_PAUSED_ID)
+    } else {
+      await tools.remove('usage', OWNER_PAUSED_ID)
+      // Turning paying back on also clears today's "ran out" mark (e.g. after a top-up).
+      await tools.remove('usage', ownerOutKey(day))
+    }
+    return { success: true, data: { readersPay: params.on === true } }
+  },
+
   /**
    * Owner only: redraw one story's picture sheet at 2K (~$0.70, about 10×
    * a 1K sheet), for a story worth showing off. Uses the story's saved
