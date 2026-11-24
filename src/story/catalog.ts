@@ -170,6 +170,12 @@ export interface StoryRecord {
   imageAlts: string[]
   /** Picture-library entry this story's pictures came from or were saved as. */
   libraryId: string
+  /** The illustrator's character sheet and per-panel scenes, kept so the
+   *  pictures can be redrawn later (older stories have neither). */
+  characters?: string
+  scenes?: string[]
+  /** True once the owner redrew the pictures at 2K. */
+  hiRes?: boolean
   /** Words across the whole tree (a single path reads about a third to half). */
   wordCount: number
   error: string

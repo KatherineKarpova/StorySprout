@@ -152,6 +152,9 @@ async function generateStory(p: GenerateStoryPayload, ctx: JobContext, env: Env)
     nodes: draft.nodes,
     imageLayout: draft.layout,
     imageAlts: draft.panels.map((pn) => pn.alt),
+    // Kept so the owner can redraw the pictures at 2K later (redrawPictures).
+    characters: draft.characters,
+    scenes: draft.panels.map((pn) => pn.scene),
     imagePaths: reused ? [reused.data.sheetPath] : [],
     libraryId: reused?.recordId ?? '',
     wordCount: draft.wordCount,

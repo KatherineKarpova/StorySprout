@@ -7,8 +7,8 @@
 
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { useQuery } from 'deepspace'
-import { ArrowLeft, Trash2 } from 'lucide-react'
+import { useAuthProfileReady, useQuery } from 'deepspace'
+import { ArrowLeft, ImageUp, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui'
 import { runAction } from '@/lib/actions'
 import { INTERESTS, interestLabel, type StoryRecord } from '@/story/catalog'
@@ -29,6 +29,9 @@ export default function StoryPage() {
   const story = useMemo(() => records.find((r) => r.recordId === id), [records, id])
   const [deleting, setDeleting] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  // The app owner is always an admin; the redrawPictures action re-checks it.
+  const { user } = useAuthProfileReady({ requireUser: true })
+  const isOwner = user?.role === 'admin'
 
   if (status === 'loading') {
     return <CenteredNote>Opening your book…</CenteredNote>
@@ -122,6 +125,8 @@ export default function StoryPage() {
         <>
           <Reader story={s} storyId={story.recordId} newStoryHref={retryHref} />
 
+          {isOwner && ready && !s.hiRes && s.imageLayout && <RedrawPictures storyId={story.recordId} />}
+
           <div className="mt-16 flex justify-center">
             {confirmDelete ? (
               <div className="flex items-center gap-2 text-[15px]">
@@ -190,6 +195,47 @@ function CenteredNote({ children }: { children: React.ReactNode }) {
   return (
     <div className="mx-auto flex min-h-[60vh] max-w-md flex-col items-center justify-center px-6 text-center text-lg text-muted-foreground">
       <p>{children}</p>
+    </div>
+  )
+}
+
+/**
+ * Owner-only upgrade: redraw this story's pictures at 2K. Costs about 70
+ * credits, so it asks first; the new pictures arrive in the open book live.
+ */
+function RedrawPictures({ storyId }: { storyId: string }) {
+  const [confirm, setConfirm] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function redraw() {
+    setBusy(true)
+    setError(null)
+    const r = await runAction('redrawPictures', { storyId })
+    setBusy(false)
+    setConfirm(false)
+    if (!r.success) setError(r.error)
+  }
+
+  return (
+    <div className="mx-auto mt-12 max-w-xl rounded-2xl border-2 border-dashed border-border p-4 text-center text-[15px]">
+      <p className="font-semibold text-foreground">Owner tools</p>
+      {confirm ? (
+        <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+          <span className="text-muted-foreground">Redraw all pictures at 2K for about 70 credits?</span>
+          <Button size="sm" loading={busy} onClick={redraw}>
+            {busy ? 'Redrawing… (about 30s)' : 'Yes, redraw'}
+          </Button>
+          <Button variant="ghost" size="sm" disabled={busy} onClick={() => setConfirm(false)}>
+            Cancel
+          </Button>
+        </div>
+      ) : (
+        <Button variant="outline" size="sm" className="mt-2 rounded-full" onClick={() => setConfirm(true)}>
+          <ImageUp aria-hidden /> Redraw pictures in high quality (about 70 credits)
+        </Button>
+      )}
+      {error && <p className="mt-2 font-semibold text-destructive">{error}</p>}
     </div>
   )
 }

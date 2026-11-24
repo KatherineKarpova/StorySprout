@@ -12,7 +12,7 @@ import { appFiles, enqueueJob } from 'deepspace/worker'
 import type { ActionHandler, ActionTools } from 'deepspace/worker'
 import type { Env } from '../../worker'
 import { APP_DAILY_STORY_LIMIT, DAILY_STORY_LIMIT, type StoryRecord } from '../story/catalog'
-import { normalizeRequest, normalizeWord, wordClipId } from '../story/prompts'
+import { decodeDataUrl, normalizeRequest, normalizeWord, panelGridPrompt, wordClipId } from '../story/prompts'
 import { VOICE_ID, recordSpeech } from '../story/voice'
 
 /** New (uncached) word recordings, per UTC day. ~$0.005 each on the free tier. */
@@ -200,6 +200,55 @@ export const actions: Record<string, ActionHandler<Env>> = {
   },
 
   /** Delete a story and the pictures and audio stored for it. */
+  /**
+   * Owner only: redraw one story's picture sheet at 2K (~$0.70, about 10×
+   * a 1K sheet), for a story worth showing off. Uses the story's saved
+   * character sheet and scenes; older stories fall back to the per-panel alt
+   * text. The new sheet goes into the story's own private folder (the shared
+   * library keeps its 1K sheet), and the open reader updates live.
+   */
+  redrawPictures: async ({ userId, params, tools, env }) => {
+    if (!env.OWNER_USER_ID || userId !== env.OWNER_USER_ID) {
+      return { success: false, error: 'Only the app owner can redraw pictures.' }
+    }
+    if (typeof params.storyId !== 'string' || !params.storyId) return { success: false, error: 'Story not found.' }
+    const got = await tools.get('stories', params.storyId)
+    if (!got.success) return { success: false, error: 'Story not found.' }
+    const story = (got.data as { record: StoryRow }).record
+    const s = story.data
+    const layout = s.imageLayout
+    if (s.status !== 'ready' || (layout !== 'grid3x2' && layout !== 'grid4x4')) {
+      return { success: false, error: 'This story has no pictures to redraw yet.' }
+    }
+    const scenes = s.scenes?.length ? s.scenes : (s.imageAlts ?? [])
+    if (scenes.length < (layout === 'grid4x4' ? 16 : 6)) return { success: false, error: 'This story is missing picture descriptions.' }
+
+    const r = await tools.integration<{ base64Images: string[] }>('gemini/generate-image', {
+      model: 'gemini-3.1-flash-image-preview',
+      imageSize: '2K',
+      aspectRatio: layout === 'grid4x4' ? '1:1' : '3:2',
+      prompt: panelGridPrompt(s.characters ?? '', scenes, layout),
+    })
+    if (!r.success) {
+      console.error(`[redrawPictures] story=${story.recordId} failed: ${r.error}`)
+      return { success: false, error: 'The pictures could not be redrawn. Nothing was changed.' }
+    }
+    const first = r.data.base64Images?.[0]
+    if (!first) return { success: false, error: 'The pictures could not be redrawn. Nothing was changed.' }
+    const { bytes, type } = decodeDataUrl(first, 'image/png')
+    const ext = type.includes('jpeg') ? 'jpg' : 'png'
+    // The story's creator, from the record (never from input), owns the folder.
+    const owner = story.createdBy ?? userId
+    const stored = await appFiles(env, { scope: 'self', userId: owner }).upload(new Blob([bytes], { type }), {
+      key: `stories/${story.recordId}/pictures-2k.${ext}`,
+      name: `pictures-2k.${ext}`,
+    })
+    const updated = await tools.update('stories', story.recordId, { imagePaths: [stored.path], hiRes: true })
+    if (!updated.success) return { success: false, error: updated.error }
+    console.info(`[redrawPictures] story=${story.recordId} redrawn at 2K`)
+    return { success: true, data: { storyId: story.recordId } }
+  },
+
   deleteStory: async ({ userId, params, tools, env }) => {
     const story = await loadOwnStory(tools, userId, params.storyId)
     if (!story) return { success: false, error: 'Story not found.' }
