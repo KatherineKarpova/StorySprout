@@ -11,6 +11,7 @@ import { Plus, Star } from 'lucide-react'
 import { Button } from '@/components/ui'
 import { Panel } from '@/components/story/Panel'
 import { gridFor } from '@/story/panels'
+import { coverPanel } from '@/story/tree'
 import { cn } from '@/lib/utils'
 import { DAILY_STORY_LIMIT, interestLabel, levelFor, type QuizAttemptRecord, type StoryRecord } from '@/story/catalog'
 
@@ -120,8 +121,15 @@ function Shelf() {
                 >
                   <div className="aspect-[4/3] bg-muted">
                     {cover && gridFor(s.imageLayout) ? (
-                      // Cover = the story's first panel, cropped from its sheet.
-                      <Panel src={cover} grid={gridFor(s.imageLayout)!} index={0} alt="" className="mx-auto aspect-square h-full" />
+                      // Cover = the sheet's cover panel (or its first picture), cropped to the card.
+                      <Panel
+                        src={cover}
+                        grid={gridFor(s.imageLayout)!}
+                        index={coverPanel(s.imageLayout)}
+                        aspect={4 / 3}
+                        alt=""
+                        className="h-full w-full"
+                      />
                     ) : cover ? (
                       <img src={cover} alt="" className="h-full w-full object-cover" loading="lazy" />
                     ) : (

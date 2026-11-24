@@ -1,28 +1,37 @@
 /**
- * The story as a book: two facing pages on wide screens, one on phones,
- * turned with the arrows (or ← →). Each page shows, top to bottom, its
- * picture panel (cropped from the story's grid sheet in Panel.tsx), its text,
- * and any phonics question attached to it, which must be answered before
- * turning on. Every word is tappable and Hope says it (see speech.ts).
+ * The choose-your-own-adventure book. Every node of the story tree is two
+ * pages, each exactly half picture (top) and half text (bottom); wide screens
+ * show a node's two pages as one spread, phones one page at a time. After a
+ * node that is not an ending comes a choice ("What should Mia do next?") with
+ * two options, each previewing the first picture of where it leads; the
+ * child's pick decides which node comes next. An ending leads to "The End".
+ * Every word is tappable and Hope says it (see speech.ts).
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, Loader2, Volume2 } from 'lucide-react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { ChevronLeft, ChevronRight, Loader2, RotateCcw, Volume2 } from 'lucide-react'
 import { Button, useToast } from '@/components/ui'
 import { cn } from '@/lib/utils'
-import type { CheckpointQuestion } from '@/story/catalog'
-import { buildPages, type Page } from '@/story/pages'
-import type { Grid } from '@/story/panels'
+import type { StoryRecord } from '@/story/catalog'
+import { gridFor } from '@/story/panels'
+import { childrenOf, endPanel, isEnding, pathFor } from '@/story/tree'
 import { Panel } from './Panel'
-import { PhonicsCard } from './Phonics'
 import { hearWord } from './speech'
 
-/** Lowercase letters only, so "Rocket!" in the text matches the word "rocket". */
-const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}'-]/gu, '')
+type Unit =
+  | { kind: 'pages'; node: number; pages: (0 | 1)[] }
+  | { kind: 'choice'; node: number; depth: number }
+  | { kind: 'end'; node: number }
 
-export interface PracticeWord {
-  word: string
-  audioPath?: string
+/** The reading order for the branch chosen so far. */
+function buildUnits(nodeCount: number, choices: number[], twoUp: boolean): Unit[] {
+  const units: Unit[] = []
+  pathFor(choices, nodeCount).forEach((node, depth) => {
+    if (twoUp) units.push({ kind: 'pages', node, pages: [0, 1] })
+    else units.push({ kind: 'pages', node, pages: [0] }, { kind: 'pages', node, pages: [1] })
+    units.push(isEnding(node, nodeCount) ? { kind: 'end', node } : { kind: 'choice', node, depth })
+  })
+  return units
 }
 
 function useWide() {
@@ -37,49 +46,49 @@ function useWide() {
   return wide
 }
 
+/** Lowercase letters only, so "Rocket!" in the text matches the word "rocket". */
+const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}'-]/gu, '')
+
 interface Props {
-  title: string
-  grade: number
-  paragraphs: string[]
-  /** The panel sheet, once painted, and its grid shape. */
-  sheetPath?: string
-  grid: Grid | null
-  /** One alt text per panel, in story order; empty when the story has no panels. */
-  panelAlts: string[]
-  painting: boolean
-  checkpoints: CheckpointQuestion[]
-  /** Chosen answer per checkpoint, null while unanswered. */
-  answers: (number | null)[]
-  onAnswer: (checkpoint: number, choice: number) => void
-  practiceWords: PracticeWord[]
+  story: StoryRecord
+  /** Option picked at each choice so far (0 or 1), root first. */
+  choices: number[]
+  onChoose: (depth: number, option: 0 | 1) => void
   onFinish: () => void
 }
 
-export function Book(props: Props) {
-  const { paragraphs, checkpoints, answers, panelAlts } = props
-  const pages = useMemo(
-    () => buildPages(paragraphs, checkpoints, panelAlts.length),
-    [paragraphs, checkpoints, panelAlts.length],
-  )
-  const wide = useWide()
-  const perView = wide ? 2 : 1
-  const [start, setStart] = useState(0)
-  const bookRef = useRef<HTMLDivElement>(null)
-  // Keep spreads aligned when the screen width changes.
-  const first = Math.min(Math.floor(start / perView) * perView, Math.max(0, pages.length - 1))
-  const visible = pages.slice(first, first + perView)
-  const blocked = visible.some((p) => p.kind === 'page' && p.questions.some((q) => answers[q] == null))
-  const atEnd = first + perView >= pages.length
+/** A page is 2:3; its picture half is therefore 4:3. */
+const PICTURE_ASPECT = 4 / 3
 
+export function Book({ story, choices, onChoose, onFinish }: Props) {
+  const nodes = useMemo(() => story.nodes ?? [], [story.nodes])
+  const wide = useWide()
+  const units = useMemo(() => buildUnits(nodes.length, choices, wide), [nodes.length, choices, wide])
+  const [at, setAt] = useState(0)
+  const index = Math.min(at, units.length - 1)
+  const unit = units[index]
+  const bookRef = useRef<HTMLDivElement>(null)
+
+  // Switching between one- and two-page views keeps the reader on the same node.
+  const lastWide = useRef(wide)
+  useEffect(() => {
+    if (lastWide.current === wide) return
+    const old = buildUnits(nodes.length, choices, lastWide.current)[index]
+    lastWide.current = wide
+    const found = units.findIndex((u) => u.kind === old?.kind && u.node === old?.node)
+    setAt(Math.max(0, found))
+    // Only on a width change; `index` is read as it was before the switch.
+  }, [wide])
+
+  const blocked = unit?.kind === 'choice' && choices.length <= unit.depth
+  const atEnd = index >= units.length - 1
   const go = useCallback(
     (dir: 1 | -1) => {
       if (dir === 1 && (blocked || atEnd)) return
-      setStart(Math.max(0, first + dir * perView))
-      // A long page may have been scrolled down to its question: bring the
-      // top of the next page back into view.
+      setAt(Math.max(0, index + dir))
       bookRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
     },
-    [blocked, atEnd, first, perView],
+    [blocked, atEnd, index],
   )
 
   useEffect(() => {
@@ -92,57 +101,214 @@ export function Book(props: Props) {
     return () => window.removeEventListener('keydown', onKey)
   }, [go])
 
+  const path = useMemo(() => pathFor(choices, nodes.length), [choices, nodes.length])
+  const practice = useMemo(
+    () => new Map(path.map((i) => [norm(nodes[i]?.phonics.word ?? ''), nodes[i]?.phonics])),
+    [path, nodes],
+  )
+
+  if (!unit) return null
+  const grid = gridFor(story.imageLayout)
+  const sheet = grid ? story.imagePaths?.[0] || undefined : undefined
+  const painting = story.status === 'illustrating'
+  // Wide: a page's height is limited so a spread fits the screen. Phone: a
+  // page fills the width. Either way it is 2:3, so its picture half is 4:3.
+  const pageStyle: React.CSSProperties = wide
+    ? { height: 'min(40rem, calc(100vh - 15rem))', aspectRatio: '2 / 3' }
+    : { width: '100%', aspectRatio: '2 / 3' }
+  const wideStyle: React.CSSProperties = wide ? { ...pageStyle, aspectRatio: '4 / 3' } : pageStyle
+
   return (
     <div>
-
-      <div className="flex items-center gap-2 sm:gap-4">
-        <Arrow dir="prev" disabled={first === 0} onClick={() => go(-1)} />
+      <div className="flex items-center justify-center gap-2 sm:gap-4">
+        <Arrow dir="prev" disabled={index === 0} onClick={() => go(-1)} />
 
         <div
-          className={cn(
-            'relative grid flex-1 overflow-hidden rounded-[1.75rem] border-2 border-border bg-card shadow-[0_18px_40px_-18px_rgba(90,60,20,0.35)]',
-            perView === 2 ? 'grid-cols-2' : 'grid-cols-1',
-          )}
-          data-testid="book"
           ref={bookRef}
+          key={index}
+          data-testid="book"
+          className={cn(
+            'sprout-pop relative flex overflow-hidden rounded-[1.75rem] border-2 border-border bg-card shadow-[0_18px_40px_-18px_rgba(90,60,20,0.35)]',
+            !wide && 'min-w-0 flex-1',
+          )}
         >
-          {perView === 2 && (
-            // The spine: a soft fold shadow down the middle.
-            <div
-              aria-hidden
-              className="pointer-events-none absolute inset-y-0 left-1/2 w-10 -translate-x-1/2 bg-[linear-gradient(90deg,transparent,rgba(90,60,20,0.10),transparent)]"
+          {unit.kind === 'pages' &&
+            unit.pages.map((page, k) => {
+              const p = nodes[unit.node].pages[page]
+              return (
+                <div
+                  key={page}
+                  style={pageStyle}
+                  className={cn('flex flex-col', unit.pages.length === 2 && k === 0 && 'border-r border-border/60')}
+                >
+                  {grid ? (
+                    <Panel
+                      src={sheet}
+                      grid={grid}
+                      index={p.panel}
+                      aspect={PICTURE_ASPECT}
+                      alt={story.imageAlts?.[p.panel] ?? ''}
+                      painting={painting}
+                      className="h-1/2 w-full shrink-0 bg-muted"
+                    />
+                  ) : (
+                    <div className="h-1/2 w-full shrink-0 bg-muted" aria-hidden />
+                  )}
+                  <PageText text={p.text} grade={story.grade} practice={practice} />
+                  <p className="pb-2 text-center text-xs font-semibold text-muted-foreground">
+                    {path.indexOf(unit.node) * 2 + page + 1}
+                  </p>
+                </div>
+              )
+            })}
+
+          {unit.kind === 'choice' && (
+            <ChoiceSpread
+              story={story}
+              node={unit.node}
+              picked={choices[unit.depth]}
+              wide={wide}
+              style={wideStyle}
+              onPick={(option) => {
+                onChoose(unit.depth, option)
+                setAt(index + 1)
+              }}
             />
           )}
-          {visible.map((page, k) => (
-            <div
-              key={first + k}
-              className={cn(
-                'sprout-pop flex min-h-[26rem] flex-col p-5 sm:p-7',
-                perView === 2 && k === 0 && 'border-r border-border/60',
-              )}
-            >
-              <div className="flex-1">
-                <PageBody page={page} {...props} />
-              </div>
-              <p className="mt-4 text-center text-sm font-semibold text-muted-foreground">{first + k + 1}</p>
-            </div>
-          ))}
-          {visible.length < perView && <div className="min-h-[26rem]" aria-hidden />}
+
+          {unit.kind === 'end' && (
+            <EndSpread
+              story={story}
+              style={wideStyle}
+              onQuiz={onFinish}
+              onOtherPath={() => {
+                // Back to the last choice, so the child can pick the other option.
+                const last = units.map((u) => u.kind).lastIndexOf('choice')
+                if (last >= 0) setAt(last)
+              }}
+            />
+          )}
         </div>
 
         <Arrow dir="next" disabled={blocked || atEnd} onClick={() => go(1)} />
       </div>
-
       <p className="mt-3 h-6 text-center text-[15px] font-semibold text-coral" aria-live="polite">
-        {blocked ? 'Answer the question to keep reading!' : ''}
+        {blocked ? 'Pick what happens next!' : ''}
       </p>
-      <p className="mt-2 text-center text-[15px] text-muted-foreground">
-        Tap any word to hear Hope say it. Practice words are{' '}
+      <p className="mt-1 text-center text-[15px] text-muted-foreground">
+        Tap any word to hear Hope say it. Tricky words are{' '}
         <span className="rounded-md bg-accent px-1.5 font-semibold text-accent-foreground underline decoration-coral decoration-2 underline-offset-4">
           marked like this
         </span>
         .
       </p>
+    </div>
+  )
+}
+
+function ChoiceSpread({
+  story,
+  node,
+  picked,
+  wide,
+  style,
+  onPick,
+}: {
+  story: StoryRecord
+  node: number
+  picked?: number
+  wide: boolean
+  style: React.CSSProperties
+  onPick: (option: 0 | 1) => void
+}) {
+  const choice = story.nodes[node].choice
+  const grid = gridFor(story.imageLayout)
+  const sheet = grid ? story.imagePaths?.[0] || undefined : undefined
+  if (!choice) return null
+  return (
+    <div style={style} className="flex flex-col items-center justify-center gap-5 p-5 sm:p-10" data-testid="choice">
+      <p className="font-display text-sm font-semibold uppercase tracking-wider text-coral">You choose!</p>
+      <h2 className="text-center text-2xl font-semibold text-foreground sm:text-3xl">{choice.prompt}</h2>
+      <div className={cn('grid w-full gap-4', wide ? 'grid-cols-2' : 'grid-cols-1')}>
+        {choice.options.map((label, o) => {
+          const next = story.nodes[childrenOf(node)[o]]
+          const on = picked === o
+          return (
+            <button
+              key={o}
+              type="button"
+              onClick={() => onPick(o as 0 | 1)}
+              aria-pressed={on}
+              className={cn(
+                'overflow-hidden rounded-2xl border-4 bg-background text-left transition-all hover:-translate-y-0.5',
+                on ? 'border-primary shadow-[0_0_0_4px_rgba(47,125,79,0.15)]' : 'border-border hover:border-primary/60',
+              )}
+            >
+              {grid && next && (
+                <Panel
+                  src={sheet}
+                  grid={grid}
+                  index={next.pages[0].panel}
+                  aspect={wide ? 16 / 9 : 16 / 7}
+                  alt=""
+                  painting={story.status === 'illustrating'}
+                  className={cn('w-full bg-muted', wide ? 'aspect-video' : 'aspect-[16/7]')}
+                />
+              )}
+              <span className="flex items-center gap-3 p-4">
+                <span
+                  className={cn(
+                    'flex h-9 w-9 shrink-0 items-center justify-center rounded-full font-display text-lg font-bold',
+                    on ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground',
+                  )}
+                >
+                  {o + 1}
+                </span>
+                <span className="text-[18px] font-semibold leading-snug text-foreground">{label}</span>
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function EndSpread({
+  story,
+  style,
+  onQuiz,
+  onOtherPath,
+}: {
+  story: StoryRecord
+  style: React.CSSProperties
+  onQuiz: () => void
+  onOtherPath: () => void
+}) {
+  const grid = gridFor(story.imageLayout)
+  const sheet = grid ? story.imagePaths?.[0] || undefined : undefined
+  const picture = endPanel(story.imageLayout)
+  return (
+    <div style={style} className="flex flex-col items-center justify-center gap-4 p-6 text-center sm:p-10">
+      {grid && picture !== undefined && (
+        <Panel
+          src={sheet}
+          grid={grid}
+          index={picture}
+          alt={story.imageAlts?.[picture] ?? ''}
+          className="aspect-square w-full max-w-[14rem] rounded-2xl shadow-[0_8px_24px_-12px_rgba(90,60,20,0.4)]"
+        />
+      )}
+      <p className="font-display text-5xl font-semibold text-primary">The End</p>
+      <p className="text-lg text-muted-foreground">Great reading! Ready for 5 questions about your story?</p>
+      <div className="flex flex-wrap justify-center gap-3">
+        <Button size="lg" className="h-14 rounded-full px-8 text-lg font-semibold" onClick={onQuiz} data-testid="start-quiz">
+          Let's go!
+        </Button>
+        <Button variant="outline" size="lg" className="h-14 rounded-full px-6 text-[16px] font-semibold" onClick={onOtherPath}>
+          <RotateCcw aria-hidden /> Try the other path
+        </Button>
+      </div>
     </div>
   )
 }
@@ -156,63 +322,53 @@ function Arrow({ dir, disabled, onClick }: { dir: 'prev' | 'next'; disabled: boo
       disabled={disabled}
       aria-label={dir === 'prev' ? 'Previous page' : 'Next page'}
       data-testid={`page-${dir}`}
-      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md transition-all hover:scale-105 active:scale-95 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none sm:h-16 sm:w-16"
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md transition-all hover:scale-105 active:scale-95 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none sm:h-16 sm:w-16"
     >
-      <Icon className="h-7 w-7 sm:h-9 sm:w-9" aria-hidden />
+      <Icon className="h-6 w-6 sm:h-9 sm:w-9" aria-hidden />
     </button>
   )
 }
 
-function PageBody({ page, ...p }: { page: Page } & Props) {
-  if (page.kind === 'page') {
-    return (
-      <div className="flex h-full flex-col">
-        {page.panel !== undefined && p.grid && (
-          <Panel
-            src={p.sheetPath}
-            grid={p.grid}
-            index={page.panel}
-            alt={p.panelAlts[page.panel] ?? ''}
-            painting={p.painting}
-            className={cn(
-              'sprout-pop mx-auto mb-4 aspect-square w-full shrink-0 rounded-2xl shadow-[0_8px_24px_-12px_rgba(90,60,20,0.4)]',
-              // A page with a question gets a smaller picture so it all fits.
-              page.questions.length ? 'max-w-[8.5rem]' : 'max-w-[12rem]',
-            )}
-          />
-        )}
-        <TextPage paragraphs={[page.text]} grade={p.grade} practiceWords={p.practiceWords} />
-        {page.questions.map((q) => (
-          <div key={q} className="mt-4 border-t-2 border-dashed border-border pt-4">
-            <p className="mb-2 font-display text-sm font-semibold uppercase tracking-wider text-coral">
-              Say it!{p.answers[q] == null && <span className="ml-2 normal-case tracking-normal text-muted-foreground">Answer to turn the page</span>}
-            </p>
-            <PhonicsCard
-              q={p.checkpoints[q]}
-              picked={p.answers[q] ?? null}
-              onPick={(i) => p.onAnswer(q, i)}
-              compact
-            />
-          </div>
-        ))}
-      </div>
-    )
-  }
-  return (
-    <div className="flex h-full flex-col items-center justify-center text-center">
-      <p className="font-display text-5xl font-semibold text-primary">The End</p>
-      <p className="mt-3 text-lg text-muted-foreground">Great reading! Ready for 3 questions about the story?</p>
-      <Button size="lg" className="mt-6 h-14 rounded-full px-8 text-lg font-semibold" onClick={p.onFinish} data-testid="start-quiz">
-        Let's go!
-      </Button>
-    </div>
-  )
-}
+/** Starting type size per grade; shrunk until the text fits its half page. */
+const TEXT_PX: Record<number, number> = { 1: 24, 2: 21, 3: 19 }
+const MIN_TEXT_PX = 14
 
-function TextPage({ paragraphs, grade, practiceWords }: { paragraphs: string[]; grade: number; practiceWords: PracticeWord[] }) {
+/**
+ * The bottom half of a page. The writer aims for what fits, but word counts
+ * are not exact, so the type steps down a pixel at a time (re-measured on
+ * resize) until the text fits without scrolling.
+ */
+function PageText({
+  text,
+  grade,
+  practice,
+}: {
+  text: string
+  grade: number
+  practice: Map<string, { word: string; audioPath?: string } | undefined>
+}) {
+  const boxRef = useRef<HTMLDivElement>(null)
+  const [px, setPx] = useState(TEXT_PX[grade] ?? 20)
   const { warning } = useToast()
   const [active, setActive] = useState<{ key: string; loading: boolean } | null>(null)
-  const practice = useMemo(() => new Map(practiceWords.map((w) => [norm(w.word), w])), [practiceWords])
+
+  useLayoutEffect(() => {
+    const el = boxRef.current
+    if (!el) return
+    const fit = () => {
+      let size = TEXT_PX[grade] ?? 20
+      el.style.fontSize = `${size}px`
+      while (el.scrollHeight > el.clientHeight + 1 && size > MIN_TEXT_PX) {
+        size -= 1
+        el.style.fontSize = `${size}px`
+      }
+      setPx(size)
+    }
+    fit()
+    const ro = new ResizeObserver(fit)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [text, grade])
 
   async function tap(key: string, token: string) {
     const word = token.replace(/^[^\p{L}]+|[^\p{L}]+$/gu, '')
@@ -228,47 +384,46 @@ function TextPage({ paragraphs, grade, practiceWords }: { paragraphs: string[]; 
     }
   }
 
-  const textSize =
-    grade === 1 ? 'text-[23px] leading-[1.75]' : grade === 2 ? 'text-[20px] leading-[1.7]' : 'text-[18px] leading-[1.7]'
-
   return (
-    <div className="space-y-5">
-      {paragraphs.map((para, i) => (
-        <p key={i} className={cn(textSize, 'text-foreground')}>
-          {para.split(/(\s+)/).map((tok, j) => {
-            if (/^\s*$/.test(tok)) return tok
-            const key = `${i}-${j}`
-            const isPractice = practice.has(norm(tok))
-            const on = active?.key === key
-            return (
-              <span
-                key={j}
-                role="button"
-                tabIndex={0}
-                aria-label={`Hear ${tok.replace(/[^\p{L}'-]/gu, '')}`}
-                onClick={() => tap(key, tok)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    tap(key, tok)
-                  }
-                }}
-                className={cn(
-                  'cursor-pointer rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                  isPractice
-                    ? 'bg-accent px-0.5 font-semibold text-accent-foreground underline decoration-coral decoration-2 underline-offset-4 hover:bg-[#ffe6a0]'
-                    : 'hover:bg-accent',
-                  on && 'bg-primary text-primary-foreground decoration-primary-foreground hover:bg-primary',
-                )}
-              >
-                {tok}
-                {on && active.loading && <Loader2 className="ml-0.5 inline h-4 w-4 animate-spin align-middle" aria-hidden />}
-                {on && !active.loading && <Volume2 className="ml-0.5 inline h-4 w-4 align-middle" aria-hidden />}
-              </span>
-            )
-          })}
-        </p>
-      ))}
+    <div
+      ref={boxRef}
+      className="min-h-0 flex-1 overflow-hidden px-5 pt-4 sm:px-7"
+      style={{ fontSize: `${px}px`, lineHeight: 1.6 }}
+    >
+      <p className="text-foreground">
+        {text.split(/(\s+)/).map((tok, j) => {
+          if (/^\s*$/.test(tok)) return tok
+          const key = String(j)
+          const isPractice = practice.has(norm(tok))
+          const on = active?.key === key
+          return (
+            <span
+              key={j}
+              role="button"
+              tabIndex={0}
+              aria-label={`Hear ${tok.replace(/[^\p{L}'-]/gu, '')}`}
+              onClick={() => tap(key, tok)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  tap(key, tok)
+                }
+              }}
+              className={cn(
+                'cursor-pointer rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                isPractice
+                  ? 'bg-accent px-0.5 font-semibold text-accent-foreground underline decoration-coral decoration-2 underline-offset-4 hover:bg-[#ffe6a0]'
+                  : 'hover:bg-accent',
+                on && 'bg-primary text-primary-foreground decoration-primary-foreground hover:bg-primary',
+              )}
+            >
+              {tok}
+              {on && active.loading && <Loader2 className="ml-0.5 inline h-4 w-4 animate-spin align-middle" aria-hidden />}
+              {on && !active.loading && <Volume2 className="ml-0.5 inline h-4 w-4 align-middle" aria-hidden />}
+            </span>
+          )
+        })}
+      </p>
     </div>
   )
 }

@@ -1,6 +1,6 @@
 /**
- * Finding the panels in a grid sheet (3×3 for one picture per page; 3×2 for
- * stories from the earlier six-panel format). The image model draws the grid
+ * Finding the panels in a grid sheet: 3×2 (grade 1's six page pictures) or
+ * 4×4 (grades 2-3: fourteen page pictures, the cover and the ending). The image model draws the grid
  * well but not exactly evenly (outer margins differ from gutters, and thin
  * borders appear), so instead of cutting equal sixths we look for the plain
  * background between panels: columns and rows that are almost entirely the
@@ -31,7 +31,7 @@ export interface Grid {
 
 /** Grid shape for a story's imageLayout; null when it has no panel sheet. */
 export function gridFor(layout: string | undefined): Grid | null {
-  if (layout === 'grid3x3') return { cols: 3, rows: 3 }
+  if (layout === 'grid4x4') return { cols: 4, rows: 4 }
   if (layout === 'grid3x2') return { cols: 3, rows: 2 }
   return null
 }
@@ -136,4 +136,19 @@ export function cropStyle(src: string, box: Box): { backgroundImage: string; bac
     backgroundSize: `${100 / box.w}% ${100 / box.h}%`,
     backgroundPosition: `${pos(box.x, box.w)}% ${pos(box.y, box.h)}%`,
   }
+}
+
+/**
+ * Trim `box` (fractions of a sheet whose width/height is `sheetAspect`) to
+ * the shape `targetAspect` (width/height), keeping its centre, so it can
+ * fill a frame of that shape like CSS object-fit: cover, without stretching.
+ */
+export function coverBox(box: Box, sheetAspect: number, targetAspect: number): Box {
+  const aspect = (box.w * sheetAspect) / box.h
+  if (aspect > targetAspect) {
+    const w = (box.h * targetAspect) / sheetAspect
+    return { ...box, x: box.x + (box.w - w) / 2, w }
+  }
+  const h = (box.w * sheetAspect) / targetAspect
+  return { ...box, y: box.y + (box.h - h) / 2, h }
 }

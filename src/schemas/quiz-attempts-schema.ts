@@ -8,6 +8,8 @@ export const quizAttemptsSchema: CollectionSchema = {
   name: 'quiz_attempts',
   columns: [
     { name: 'storyId', storage: 'text', interpretation: 'plain', required: true, maxLength: 64 },
+    /** Node indices of the branch the child read. */
+    { name: 'path', storage: 'text', interpretation: { kind: 'json' } },
     { name: 'answers', storage: 'text', interpretation: { kind: 'json' } },
     { name: 'correct', storage: 'number', interpretation: 'plain' },
     { name: 'total', storage: 'number', interpretation: 'plain' },
@@ -19,7 +21,7 @@ export const quizAttemptsSchema: CollectionSchema = {
       create: true,
       update: false,
       delete: 'own',
-      writableFields: ['storyId', 'answers', 'correct', 'total'],
+      writableFields: ['storyId', 'path', 'answers', 'correct', 'total'],
     },
     admin: { read: true, create: true, update: false, delete: true },
   },

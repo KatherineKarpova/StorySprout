@@ -84,8 +84,25 @@ export default function StoryPage() {
     )
   }
 
-  const paragraphs = s.paragraphs ?? []
+  const nodes = Array.isArray(s.nodes) ? s.nodes : []
   const ready = s.status === 'ready'
+  // Stories from before choose-your-own-adventure have no tree to show.
+  if (ready && nodes.length === 0) {
+    return (
+      <CenteredNote>
+        <span className="block font-display text-2xl font-semibold text-foreground">This story is from an older StorySprout.</span>
+        <span className="mt-2 block">Stories are choose-your-own-adventures now! Make a new one, or remove this one.</span>
+        <span className="mt-6 flex flex-wrap items-center justify-center gap-3">
+          <Link to={retryHref} className="inline-flex h-12 items-center rounded-full bg-primary px-6 font-semibold text-primary-foreground">
+            Make a new one
+          </Link>
+          <Button variant="ghost" loading={deleting} onClick={remove} className="h-12 rounded-full px-5">
+            <Trash2 className="h-4 w-4" aria-hidden /> Remove it
+          </Button>
+        </span>
+      </CenteredNote>
+    )
+  }
 
   return (
     <article className="mx-auto max-w-6xl px-4 pb-28 pt-6 sm:pt-10">
@@ -99,7 +116,7 @@ export default function StoryPage() {
         </div>
       )}
 
-      {paragraphs.length === 0 ? (
+      {nodes.length === 0 ? (
         <WritingPlaceholder interests={(s.interests ?? []).map(interestLabel)} />
       ) : (
         <>
@@ -157,9 +174,9 @@ function WritingPlaceholder({ interests }: { interests: string[] }) {
       </div>
       <p className="mt-6 font-display text-3xl font-semibold text-foreground">Writing your story…</p>
       {interests.length > 0 && (
-        <p className="mt-2 text-lg text-muted-foreground">A brand-new story about {interests.join(' and ')}.</p>
+        <p className="mt-2 text-lg text-muted-foreground">A brand-new adventure about {interests.join(' and ')}.</p>
       )}
-      <p className="mt-1 text-[15px] text-muted-foreground">This takes about half a minute. The picture comes next!</p>
+      <p className="mt-1 text-[15px] text-muted-foreground">This takes about a minute. The pictures come next!</p>
       <div className="mx-auto mt-10 max-w-xl space-y-3" aria-hidden>
         {[100, 92, 96, 70].map((w, i) => (
           <div key={i} className="sprout-shimmer h-5 rounded-full" style={{ width: `${w}%` }} />

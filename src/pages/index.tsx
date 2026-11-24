@@ -16,13 +16,13 @@ const STEPS = [
   },
   {
     emoji: '📖',
-    title: 'Read a brand-new story',
-    body: 'About 500 words and a picture, laid out like a real book. Tap any word to hear it said.',
+    title: 'Choose the adventure',
+    body: 'A brand-new picture book where your reader decides what happens next. Tap any word to hear it said.',
   },
   {
     emoji: '🗣️',
-    title: 'Say it, then show what you know',
-    body: 'Every 100 words or so, a phonics question about the trickiest word. Then three comprehension questions, with stars.',
+    title: 'Show what you know',
+    body: 'Five questions about the path they chose: three about what happened, two about how words sound. With stars.',
   },
 ]
 
@@ -48,8 +48,8 @@ export default function Landing() {
                 Stories about what your kid loves, at the level they read.
               </h1>
               <p className="mt-5 max-w-xl text-xl text-muted-foreground">
-                StorySprout writes a new illustrated story in about a minute, then helps your
-                reader sound out a tricky word and check they understood what happened.
+                StorySprout writes a new illustrated choose-your-own-adventure in about a minute.
+                Your reader picks what happens next, then shows what they understood.
               </p>
               <div className="mt-8 flex flex-wrap items-center gap-4">
                 <Link

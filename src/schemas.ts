@@ -14,6 +14,7 @@ import { storiesSchema } from './schemas/stories-schema'
 import { quizAttemptsSchema } from './schemas/quiz-attempts-schema'
 import { wordClipsSchema } from './schemas/word-clips-schema'
 import { usageSchema } from './schemas/usage-schema'
+import { pictureLibrarySchema } from './schemas/picture-library-schema'
 
 export const schemas: CollectionSchema[] = [
   usersSchema,
@@ -22,4 +23,5 @@ export const schemas: CollectionSchema[] = [
   quizAttemptsSchema,
   wordClipsSchema,
   usageSchema,
+  pictureLibrarySchema,
 ]

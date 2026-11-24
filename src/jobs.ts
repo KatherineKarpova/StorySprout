@@ -1,16 +1,20 @@
 /**
  * Background jobs, run by AppJobRoom (worker.ts).
  *
- * `generate-story` is the whole paid pipeline for one story:
+ * `generate-story` is the whole paid pipeline for one choose-your-own-
+ * adventure story:
  *
- *   1. Claude writes the story + quiz as JSON  → record shows text   (status: illustrating)
- *   2. Gemini paints 9 page pictures as one grid → R2 → panels  (status: recording)
- *   3. Hope (ElevenLabs) says each phonics word → R2 → audio  (status: ready)
+ *   0. Picture library: a saved sheet with the same tree size and interests
+ *      that this reader has not seen? Then reuse it and skip step 2.
+ *   1. Claude writes the story tree + questions as JSON (fitting the reused
+ *      pictures when there are some)           → record shows text (illustrating)
+ *   2. Gemini paints every panel as one grid → R2 (and into the library
+ *      when the topics are all catalog interests) → panels           (recording)
+ *   3. Hope (ElevenLabs) says each node's phonics word → R2 → audio  (ready)
  *
  * Each stage patches the story record, and RecordRoom pushes the patch to the
- * reader's open page over its WebSocket, so the child starts reading after
- * step 1 instead of waiting for the slowest call. Only step 1 is fatal: a
- * story with a missing picture or sound is still a story.
+ * reader's open page over its WebSocket. Only step 1 is fatal: a story with
+ * a missing picture or sound is still a story.
  */
 
 import { appFiles } from 'deepspace/worker'
@@ -18,26 +22,36 @@ import type { ActionTools, Job, JobContext } from 'deepspace/worker'
 import type { Env } from '../worker'
 import { GENERATE_STORY_JOB, type GenerateStoryPayload } from './actions/index'
 import { createActionTools } from './server/action-routes'
-import type { StoryRecord } from './story/catalog'
-import { recordSpeech } from './story/voice'
+import type { ImageLayout, StoryNode, StoryRecord } from './story/catalog'
 import {
   SYSTEM_PROMPT,
   buildUserPrompt,
-  countWords,
   decodeDataUrl,
   extractJson,
   panelGridPrompt,
-  parseStoryDraft,
+  parseStory,
+  type ExistingPictures,
+  type PanelScene,
   type StoryDraft,
 } from './story/prompts'
+import { recordSpeech } from './story/voice'
 
 /**
- * Haiku, not Sonnet: Claude was ~60% of a story's cost on Sonnet (~$0.19 of
- * ~$0.33). Stories for ages 6-8 are short and simple, and the strict JSON
- * validation in parseStoryDraft catches a weaker draft either way.
+ * Haiku, not Sonnet: Claude was ~60% of a story's cost on Sonnet. Stories for
+ * young readers are simple, and parseStory's strict validation (one retry)
+ * catches a weaker draft either way.
  */
 export const STORY_MODEL = 'claude-haiku-5-5'
-export const IMAGE_MODEL = 'gemini-2.5-flash-image'
+
+/**
+ * Sheet settings per layout. The 3×2 sheet's panels are ~340px at 1K, fine
+ * for half a page. A 4×4 sheet at 1K would give ~250px panels, too soft for
+ * half a page, so it is drawn at 2K with a model that supports 2K.
+ */
+const SHEETS: Record<Exclude<ImageLayout, ''>, { model: string; aspectRatio: string; imageSize?: string }> = {
+  grid3x2: { model: 'gemini-2.5-flash-image', aspectRatio: '3:2' },
+  grid4x4: { model: 'gemini-3.1-flash-image-preview', aspectRatio: '1:1', imageSize: '2K' },
+}
 
 const JOB_DEADLINE_MS = 8 * 60 * 1000
 
@@ -48,9 +62,49 @@ export async function runJob(job: Job, ctx: JobContext, env: Env): Promise<unkno
   throw new Error(`Unknown job type: ${job.type}`)
 }
 
+interface LibraryRow {
+  recordId: string
+  data: {
+    band: string
+    interestsKey: string
+    layout: string
+    characters: string
+    panels: PanelScene[]
+    sheetPath: string
+    uses?: number
+  }
+}
+
+const bandFor = (grade: number) => (grade === 1 ? 'tree3' : 'tree7')
+/** Only stories made purely from catalog interests share pictures. */
+const shareable = (p: GenerateStoryPayload) => p.custom.length === 0 && p.interests.length > 0
+const interestsKey = (ids: string[]) => [...ids].sort().join('+')
+
+/** A saved sheet for the same tree and interests that this reader has not seen. */
+async function findLibrarySheet(tools: ActionTools, p: GenerateStoryPayload): Promise<LibraryRow | null> {
+  if (!shareable(p)) return null
+  const [lib, mine] = await Promise.all([
+    tools.query('picture_library', {
+      where: { band: bandFor(p.grade), interestsKey: interestsKey(p.interests) },
+      limit: 50,
+    }),
+    tools.query('stories', { where: { createdBy: p.userId }, limit: 200 }),
+  ])
+  if (!lib.success || !mine.success) return null
+  const seen = new Set(
+    (mine.data as { records: { data: { libraryId?: string } }[] }).records
+      .map((r) => r.data.libraryId)
+      .filter(Boolean),
+  )
+  const fresh = (lib.data as unknown as { records: LibraryRow[] }).records.filter(
+    (r) => r.data.sheetPath && !seen.has(r.recordId),
+  )
+  return fresh.length ? fresh[Math.floor(Math.random() * fresh.length)] : null
+}
+
 async function generateStory(p: GenerateStoryPayload, ctx: JobContext, env: Env) {
   const tools = createActionTools(env, p.userId, '')
-  const files = appFiles(env, { scope: 'self', userId: p.userId })
+  const privateFiles = appFiles(env, { scope: 'self', userId: p.userId })
   const deadline = Date.now() + JOB_DEADLINE_MS
   const patch = async (data: Partial<StoryRecord>) => {
     const r = await tools.update('stories', p.storyId, data)
@@ -61,12 +115,17 @@ async function generateStory(p: GenerateStoryPayload, ctx: JobContext, env: Env)
     if (Date.now() > deadline) throw new Error('Took too long')
   }
 
-  // ── 1. Words ────────────────────────────────────────────────────────────
+  // ── 0 + 1. Library lookup, then the words ─────────────────────────────────
   let draft: StoryDraft
+  let reused: LibraryRow | null = null
   try {
     ctx.progress(0.05, 'writing')
-    await patch({ status: 'writing', progressMessage: 'Writing your story…' })
-    draft = await writeStory(tools, p)
+    await patch({ status: 'writing', progressMessage: 'Writing your adventure…' })
+    reused = await findLibrarySheet(tools, p)
+    const existing: ExistingPictures | undefined = reused
+      ? { characters: reused.data.characters, panels: reused.data.panels }
+      : undefined
+    draft = await writeStory(tools, p, existing)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error(`[story ${p.storyId}] writing failed: ${message}`)
@@ -81,81 +140,119 @@ async function generateStory(p: GenerateStoryPayload, ctx: JobContext, env: Env)
     throw err
   }
   checkAlive()
+  if (reused) {
+    console.info(`[story ${p.storyId}] reusing library sheet ${reused.recordId}`)
+    await tools.update('picture_library', reused.recordId, { uses: (reused.data.uses ?? 0) + 1 })
+  }
   await patch({
     title: draft.title,
-    paragraphs: draft.paragraphs,
-    questions: draft.questions,
-    checkpoints: draft.checkpoints,
-    soundWords: [],
+    nodes: draft.nodes,
+    imageLayout: draft.layout,
     imageAlts: draft.panels.map((pn) => pn.alt),
-    imageSlots: [],
-    imageLayout: 'grid3x3',
-    wordCount: countWords(draft.paragraphs),
-    status: 'illustrating',
-    progressMessage: 'Painting the pictures…',
+    imagePaths: reused ? [reused.data.sheetPath] : [],
+    libraryId: reused?.recordId ?? '',
+    wordCount: draft.wordCount,
+    status: reused ? 'recording' : 'illustrating',
+    progressMessage: reused ? 'Recording the tricky words…' : 'Painting the pictures…',
   })
-  ctx.progress(0.4, 'illustrating')
+  ctx.progress(0.4, reused ? 'recording' : 'illustrating')
 
-  // ── 2. One grid image of nine page pictures (a failure leaves none) ──────
-  const imagePaths: string[] = []
-  try {
-    const r = await tools.integration<{ base64Images: string[] }>('gemini/generate-image', {
-      model: IMAGE_MODEL,
-      prompt: panelGridPrompt(draft.characters, draft.panels.map((pn) => pn.scene)),
-      // 3 columns x 3 rows of square panels.
-      aspectRatio: '1:1',
-    })
-    if (!r.success) throw new Error(r.error)
-    const first = r.data.base64Images?.[0]
-    if (!first) throw new Error('no image returned')
-    const { bytes, type } = decodeDataUrl(first, 'image/png')
-    const ext = type.includes('jpeg') ? 'jpg' : type.split('/')[1] || 'png'
-    const stored = await files.upload(new Blob([bytes], { type }), {
-      key: `stories/${p.storyId}/panels.${ext}`,
-      name: `panels.${ext}`,
-    })
-    imagePaths.push(stored.path)
-  } catch (err) {
-    console.error(`[story ${p.storyId}] panel grid failed: ${String(err)}`)
+  // ── 2. One grid image of every panel (a failure leaves none) ─────────────
+  if (!reused) {
+    try {
+      const sheet = SHEETS[draft.layout]
+      const r = await tools.integration<{ base64Images: string[] }>('gemini/generate-image', {
+        ...sheet,
+        prompt: panelGridPrompt(
+          draft.characters,
+          draft.panels.map((pn) => pn.scene),
+          draft.layout,
+        ),
+      })
+      if (!r.success) throw new Error(r.error)
+      const first = r.data.base64Images?.[0]
+      if (!first) throw new Error('no image returned')
+      const { bytes, type } = decodeDataUrl(first, 'image/png')
+      const ext = type.includes('jpeg') ? 'jpg' : type.split('/')[1] || 'png'
+      const blob = new Blob([bytes], { type })
+      if (shareable(p)) {
+        // Library sheets live in the app's public files so any reader's story
+        // can reuse them; they show catalog topics only, nothing personal.
+        const stored = await appFiles(env, { scope: 'app', userId: p.userId }).upload(blob, {
+          key: `library/${p.storyId}.${ext}`,
+          name: `pictures.${ext}`,
+        })
+        const entry = await tools.create('picture_library', {
+          band: bandFor(p.grade),
+          interestsKey: interestsKey(p.interests),
+          layout: draft.layout,
+          characters: draft.characters,
+          panels: draft.panels,
+          sheetPath: stored.path,
+          sourceStoryId: p.storyId,
+          uses: 1,
+        })
+        await patch({
+          imagePaths: [stored.path],
+          libraryId: entry.success ? (entry.data as { recordId: string }).recordId : '',
+        })
+      } else {
+        const stored = await privateFiles.upload(blob, {
+          key: `stories/${p.storyId}/pictures.${ext}`,
+          name: `pictures.${ext}`,
+        })
+        await patch({ imagePaths: [stored.path] })
+      }
+    } catch (err) {
+      console.error(`[story ${p.storyId}] picture sheet failed: ${String(err)}`)
+    }
+    checkAlive()
+    await patch({ status: 'recording', progressMessage: 'Recording the tricky words…' })
+    ctx.progress(0.75, 'recording')
   }
-  checkAlive()
-  await patch({ imagePaths, status: 'recording', progressMessage: 'Recording the tricky words…' })
-  ctx.progress(0.75, 'recording')
 
-  // ── 3. Hope says each in-book phonics word ──────────────────────────────
-  const checkpoints = await Promise.all(
-    draft.checkpoints.map(async (q, i) => {
+  // ── 3. Hope says each node's phonics word ────────────────────────────────
+  const nodes: StoryNode[] = await Promise.all(
+    draft.nodes.map(async (node, i) => {
+      const word = node.phonics.word
       try {
         // Said twice with a pause: once to hear it, once to say it along.
-        const clip = await recordSpeech(tools, `${q.word}. ... ${q.word}.`)
-        const stored = await files.upload(clip, { key: `stories/${p.storyId}/phonics-${i + 1}.mp3`, name: `phonics-${i + 1}.mp3` })
-        return { ...q, audioPath: stored.path }
+        const clip = await recordSpeech(tools, `${word}. ... ${word}.`)
+        const stored = await privateFiles.upload(clip, {
+          key: `stories/${p.storyId}/phonics-${i}.mp3`,
+          name: `${word}.mp3`,
+        })
+        return { ...node, phonics: { ...node.phonics, audioPath: stored.path } }
       } catch (err) {
-        // The reader falls back to the shared tapped-word cache (sayWord).
-        console.error(`[story ${p.storyId}] phonics audio ${i + 1} failed: ${String(err)}`)
-        return q
+        // The quiz falls back to the shared tapped-word cache (sayWord).
+        console.error(`[story ${p.storyId}] phonics audio ${i} failed: ${String(err)}`)
+        return node
       }
     }),
   )
 
-  await patch({ checkpoints, status: 'ready', progressMessage: '' })
+  await patch({ nodes, status: 'ready', progressMessage: '' })
   ctx.progress(1, 'ready')
-  return { storyId: p.storyId, pictures: imagePaths.filter(Boolean).length }
+  return { storyId: p.storyId, reusedPictures: !!reused }
 }
 
 /** Ask Claude for the story; one retry when the JSON does not validate. */
-async function writeStory(tools: ActionTools, p: GenerateStoryPayload): Promise<StoryDraft> {
+async function writeStory(
+  tools: ActionTools,
+  p: GenerateStoryPayload,
+  existing?: ExistingPictures,
+): Promise<StoryDraft> {
   const messages: { role: 'user' | 'assistant'; content: string }[] = [
-    { role: 'user', content: buildUserPrompt(p) },
+    { role: 'user', content: buildUserPrompt(p, existing) },
   ]
   let lastError = ''
   for (let attempt = 0; attempt < 2; attempt++) {
     const r = await tools.integration<unknown>('anthropic/chat-completion', {
       model: STORY_MODEL,
       // The model reasons before it answers, and reasoning tokens count
-      // against this budget. 4096 was used up entirely by reasoning in the
-      // first local test; the story JSON itself is ~1.5k tokens.
-      max_tokens: 16000,
+      // against this budget (4096 was used up by reasoning alone once). A
+      // 7-node tree is ~3-4k tokens of JSON.
+      max_tokens: 20000,
       temperature: 0.9,
       system: SYSTEM_PROMPT,
       messages,
@@ -166,7 +263,7 @@ async function writeStory(tools: ActionTools, p: GenerateStoryPayload): Promise<
     }
     const text = replyText(r.data)
     try {
-      return parseStoryDraft(extractJson(text))
+      return parseStory(extractJson(text), p.grade, existing)
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err)
       messages.push(

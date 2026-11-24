@@ -1,10 +1,9 @@
 /**
- * End-of-story quiz: three reading comprehension questions, one at a time
- * (the phonics questions come earlier, as pages inside the Book). Answer →
- * see why, pointing back at the story. The finished attempt, in-book phonics
- * answers included, is saved to `quiz_attempts` with the reader's own RBAC.
- * Stories made before in-book phonics may still carry a phonics question
- * here; it renders with the shared PhonicsCard.
+ * End-of-story quiz, one question at a time: three reading comprehension
+ * questions about the branch the child read, then two pronunciation
+ * questions (hear the word first, answer, then the tip). The finished
+ * attempt, with the branch, is saved to `quiz_attempts` with the reader's
+ * own RBAC.
  */
 
 import { useState } from 'react'
@@ -13,40 +12,29 @@ import { RotateCcw, Star } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui'
 import { cn } from '@/lib/utils'
-import type { Question, QuizAttemptRecord, SoundWord } from '@/story/catalog'
+import type { Question, QuizAttemptRecord } from '@/story/catalog'
 import { Choices } from './Choices'
-import { HearButton, PhonicsCard } from './Phonics'
+import { PhonicsCard } from './Phonics'
 
 interface Props {
   storyId: string
+  /** Node indices of the branch the child read. */
+  path: number[]
   questions: Question[]
-  soundWords: SoundWord[]
-  /** Answers already given to the in-book phonics checkpoints. */
-  checkpointAnswers: number[]
-  checkpointCorrect: number
   newStoryHref: string
   /** False for the public demo: a signed-out visitor has nowhere to save a score. */
   saveAttempt?: boolean
 }
 
-export function Quiz({
-  storyId,
-  questions,
-  soundWords,
-  checkpointAnswers,
-  checkpointCorrect,
-  newStoryHref,
-  saveAttempt = true,
-}: Props) {
+export function Quiz({ storyId, path, questions, newStoryHref, saveAttempt = true }: Props) {
   const { create, ready } = useMutations<QuizAttemptRecord>('quiz_attempts')
   const [step, setStep] = useState(0)
   const [answers, setAnswers] = useState<(number | null)[]>(() => questions.map(() => null))
   const [saved, setSaved] = useState(false)
 
   const done = step >= questions.length
-  const endCorrect = answers.filter((a, i) => a === questions[i]?.answerIndex).length
-  const correct = endCorrect + checkpointCorrect
-  const total = questions.length + checkpointAnswers.length
+  const correct = answers.filter((a, i) => a === questions[i]?.answerIndex).length
+  const total = questions.length
 
   function choose(i: number) {
     if (answers[step] !== null) return
@@ -58,7 +46,7 @@ export function Quiz({
     setStep(nextStep)
     if (saveAttempt && nextStep >= questions.length && !saved && ready) {
       setSaved(true)
-      create({ storyId, answers: [...checkpointAnswers, ...answers.map((a) => a ?? -1)], correct, total })
+      create({ storyId, path, answers: answers.map((a) => a ?? -1), correct, total })
     }
   }
 
@@ -82,10 +70,9 @@ export function Quiz({
         <p className="mt-2 text-lg text-muted-foreground">
           {correct} out of {total} right.
         </p>
-        {soundWords.length > 0 && <SoundWords words={soundWords} />}
         <div className="mt-8 flex flex-wrap justify-center gap-3">
           <Button variant="outline" size="lg" className="rounded-full" onClick={restart}>
-            <RotateCcw aria-hidden /> Try the last questions again
+            <RotateCcw aria-hidden /> Try the questions again
           </Button>
           <Link
             to={newStoryHref}
@@ -141,21 +128,5 @@ export function Quiz({
         </Button>
       )}
     </section>
-  )
-}
-
-function SoundWords({ words }: { words: SoundWord[] }) {
-  return (
-    <div className="mx-auto mt-8 max-w-lg rounded-2xl bg-muted/60 p-5">
-      <p className="font-display text-lg font-semibold text-foreground">More words to practice</p>
-      <ul className="mt-3 space-y-2.5">
-        {words.map((w) => (
-          <li key={w.word} className="flex flex-wrap items-center justify-between gap-2">
-            <span className="font-display text-2xl font-semibold text-foreground">{w.chunks.join(' · ')}</span>
-            <HearButton word={w.word} path={w.audioPath} />
-          </li>
-        ))}
-      </ul>
-    </div>
   )
 }

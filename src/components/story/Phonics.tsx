@@ -1,7 +1,7 @@
 /**
- * Phonics UI shared by the in-book checkpoint pages and (for stories made
- * before in-book phonics) the end quiz: see the word in sound-it-out chunks,
- * try saying it, answer, then hear Hope say it with the tip.
+ * Pronunciation questions in the end-of-story quiz: see the word in
+ * sound-it-out chunks and hear Hope say it, answer a question about how it
+ * sounds (rhymes, matching sounds), then read the tip.
  */
 
 import { useState } from 'react'
@@ -12,45 +12,16 @@ import type { PhonicsQuestion } from '@/story/catalog'
 import { Choices } from './Choices'
 import { hearWord } from './speech'
 
-export function PhonicsWord({ q, compact }: { q: PhonicsQuestion; compact?: boolean }) {
-  if (compact) {
-    // In-page version: word, sound chunks and the say-it prompt on one row,
-    // so a question fits under the page's picture and text.
-    return (
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl bg-muted/60 px-4 py-3">
-        <span className="font-display text-3xl font-semibold tracking-wide text-foreground">{q.word}</span>
-        <span className="flex flex-wrap gap-1.5" aria-label={`Sound it out: ${q.chunks.join(', ')}`}>
-          {q.chunks.map((chunk, i) => (
-            <span
-              key={i}
-              className={cn(
-                'rounded-lg px-2 py-0.5 font-display text-lg font-semibold',
-                i % 2 === 0 ? 'bg-secondary text-secondary-foreground' : 'bg-[#dcebf7] text-[#1f4d7a]',
-              )}
-            >
-              {chunk}
-            </span>
-          ))}
-        </span>
-        <span className="inline-flex items-center gap-1.5 text-[14px] font-semibold text-foreground">
-          <Mic className="h-4 w-4 text-coral" aria-hidden />
-          Say it out loud!
-        </span>
-      </div>
-    )
-  }
+function PhonicsWord({ q }: { q: PhonicsQuestion }) {
   return (
-    <div className={cn('rounded-2xl bg-muted/60 text-center', compact ? 'p-4' : 'mt-5 p-5')}>
-      <p className={cn('font-display font-semibold tracking-wide text-foreground', compact ? 'text-4xl' : 'text-5xl sm:text-6xl')}>
-        {q.word}
-      </p>
+    <div className="rounded-2xl bg-muted/60 p-5 text-center">
+      <p className="font-display text-5xl font-semibold tracking-wide text-foreground sm:text-6xl">{q.word}</p>
       <div className="mt-3 flex flex-wrap justify-center gap-2" aria-label={`Sound it out: ${q.chunks.join(', ')}`}>
         {q.chunks.map((chunk, i) => (
           <span
             key={i}
             className={cn(
-              'rounded-xl px-3 py-1 font-display font-semibold',
-              compact ? 'text-xl' : 'text-2xl',
+              'rounded-xl px-3 py-1 font-display text-2xl font-semibold',
               i % 2 === 0 ? 'bg-secondary text-secondary-foreground' : 'bg-[#dcebf7] text-[#1f4d7a]',
             )}
           >
@@ -58,51 +29,41 @@ export function PhonicsWord({ q, compact }: { q: PhonicsQuestion; compact?: bool
           </span>
         ))}
       </div>
-      <p className="mt-3 inline-flex items-center gap-2 text-[16px] font-semibold text-foreground">
-        <Mic className="h-5 w-5 text-coral" aria-hidden />
-        Try saying it out loud first!
-      </p>
+      <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+        <span className="inline-flex items-center gap-2 text-[16px] font-semibold text-foreground">
+          <Mic className="h-5 w-5 text-coral" aria-hidden />
+          Say it out loud, then listen!
+        </span>
+        <HearButton word={q.word} path={q.audioPath} />
+      </div>
     </div>
   )
 }
 
-/** A complete phonics question: word, prompt, choices, then tip + Hope's audio. */
+/** A complete pronunciation question: word + audio, prompt, choices, then the tip. */
 export function PhonicsCard({
   q,
   picked,
   onPick,
-  compact,
 }: {
   q: PhonicsQuestion
   picked: number | null
   onPick: (i: number) => void
-  compact?: boolean
 }) {
   const right = picked !== null && picked === q.answerIndex
   return (
     <div>
-      <PhonicsWord q={q} compact={compact} />
-      <h3 className={cn('font-semibold text-foreground', compact ? 'mt-3 text-lg leading-snug' : 'mt-6 text-2xl')}>{q.prompt}</h3>
-      <div className={compact ? 'mt-3' : 'mt-5'}>
-        <Choices choices={q.choices} answerIndex={q.answerIndex} picked={picked} onPick={onPick} size={compact ? 'md' : 'lg'} />
+      <PhonicsWord q={q} />
+      <h3 className="mt-6 text-2xl font-semibold text-foreground">{q.prompt}</h3>
+      <div className="mt-5">
+        <Choices choices={q.choices} answerIndex={q.answerIndex} picked={picked} onPick={onPick} />
       </div>
       {picked !== null && (
-        <div
-          // Answering can push the feedback below the fold: bring it into view.
-          ref={(el) => {
-            if (compact) el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-          }}
-          className={cn(
-            'sprout-pop rounded-2xl',
-            compact ? 'mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 p-3' : 'mt-4 space-y-3 p-4',
-            right ? 'bg-primary/10' : 'bg-accent',
-          )}
-        >
-          <p className={cn('font-display font-semibold text-foreground', compact ? 'text-base' : 'text-lg')}>
-            {right ? 'Yes! You got it! 🎉' : compact ? 'Good try!' : 'Good try! Here is the answer.'}
+        <div className={cn('sprout-pop mt-4 space-y-2 rounded-2xl p-4', right ? 'bg-primary/10' : 'bg-accent')}>
+          <p className="font-display text-lg font-semibold text-foreground">
+            {right ? 'Yes! You got it! 🎉' : 'Good try! Here is the answer.'}
           </p>
-          <HearButton word={q.word} path={q.audioPath} big={!compact} />
-          {q.tip && <p className={cn('text-foreground', compact ? 'basis-full text-[15px]' : 'text-[16px]')}>{q.tip}</p>}
+          {q.tip && <p className="text-[16px] text-foreground">{q.tip}</p>}
         </div>
       )}
     </div>

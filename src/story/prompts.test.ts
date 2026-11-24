@@ -1,48 +1,49 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildUserPrompt,
   cleanCustom,
   decodeDataUrl,
   extractJson,
   normalizeRequest,
   normalizeWord,
-  parseStoryDraft,
+  parseStory,
   wordClipId,
 } from './prompts'
-import { buildPages, panelFor } from './pages'
-import { detectPanels, evenPanels } from './panels'
+import { coverBox, detectPanels, evenPanels } from './panels'
+import { childrenOf, isEnding, pathFor, quizFor } from './tree'
 import { replyText } from '../jobs'
 
-const phonics = (word: string, page: number) => ({
-  page,
+const q3 = (prompt: string) => ({ prompt, choices: ['a', 'b', 'c'], answerIndex: 1, explanation: 'x' })
+const phon = (word: string) => ({
   word,
   chunks: ['x'],
   tip: 'tip',
-  prompt: `How many syllables in ${word}?`,
-  choices: ['1', '2', '3'],
-  answerIndex: 1,
+  prompt: `Which word rhymes with ${word}?`,
+  choices: ['one', 'two', 'three'],
+  answerIndex: 0,
 })
 
-const goodDraft = () => ({
-  title: 'Dot and the Moon Rocket',
-  characters: 'Dot is a small girl with red curls and a yellow raincoat.',
-  pages: [
-    'Dot built a rocket.', // 0
-    'The rocket was shiny.', // 1
-    'Dot flew past a planet.', // 2
-    'She saw a comet.', // 3
-    'The comet was bright.', // 4
-    'Dot landed on the moon.', // 5
-    'She saw a crater.', // 6
-    'Dot planted a flag.', // 7
-    'She waved to Earth.', // 8 (last page)
-  ].map((text, i) => ({ text, scene: `Scene ${i + 1}`, alt: `Picture ${i + 1}` })),
-  checkpoints: [phonics('rocket', 0), phonics('planet', 2), phonics('comet', 3), phonics('landed', 5)],
-  comprehension: [
-    { prompt: 'What did Dot build?', choices: ['A boat', 'A rocket', 'A kite'], answerIndex: 1, explanation: 'She built a rocket.' },
-    { prompt: 'What came first?', choices: ['a', 'b', 'c'], answerIndex: 0, explanation: 'x' },
-    { prompt: 'Why was Dot proud?', choices: ['a', 'b', 'c'], answerIndex: 2, explanation: 'x' },
-  ],
-})
+/** Phonics word for node i (letters only: the validator strips digits). */
+const WORDS = ['apple', 'bridge', 'castle', 'dolphin', 'eagle', 'feather', 'garden']
+
+/** A valid raw tree: node i's pages mention WORDS[i], its phonics word. */
+function rawTree(nodeCount: 3 | 7, opts: { scenes?: boolean } = {}) {
+  const scenes = opts.scenes ?? true
+  return {
+    title: 'Pip Finds a Map',
+    characters: 'Pip is a small fox with a green scarf.',
+    ...(nodeCount === 7 && scenes ? { coverScene: 'Pip on a hill', endScene: 'Pip asleep' } : {}),
+    nodes: Array.from({ length: nodeCount }, (_, i) => ({
+      pages: [0, 1].map((j) => ({
+        text: `Node ${i} page ${j}. Pip saw a ${WORDS[i]} today.`,
+        ...(scenes ? { scene: `scene ${i}.${j}`, alt: `alt ${i}.${j}` } : {}),
+      })),
+      ...(isEnding(i, nodeCount) ? {} : { choice: { prompt: 'What should Pip do?', options: ['Go left', 'Go right'] } }),
+      phonics: phon(WORDS[i]),
+      comprehension: nodeCount === 3 && i === 0 ? [q3(`n${i} q1`), q3(`n${i} q2`)] : [q3(`n${i} q1`)],
+    })),
+  }
+}
 
 describe('normalizeRequest', () => {
   it('accepts a grade and known interests', () => {
@@ -79,72 +80,104 @@ describe('cleanCustom', () => {
   })
 })
 
-describe('parseStoryDraft', () => {
-  it('keeps phonics checkpoints in the book and comprehension at the end', () => {
-    const d = parseStoryDraft(goodDraft())
-    expect(d.checkpoints.map((q) => [q.kind, q.word, q.afterParagraph])).toEqual([
-      ['phonics', 'rocket', 0],
-      ['phonics', 'planet', 2],
-      ['phonics', 'comet', 3],
-      ['phonics', 'landed', 5],
-    ])
-    expect(d.questions.map((q) => q.kind)).toEqual(['comprehension', 'comprehension', 'comprehension'])
+describe('tree', () => {
+  it('connects nodes in heap order', () => {
+    expect(childrenOf(0)).toEqual([1, 2])
+    expect(childrenOf(2)).toEqual([5, 6])
+    expect([0, 1, 2].map((i) => isEnding(i, 3))).toEqual([false, true, true])
+    expect([2, 3, 6].map((i) => isEnding(i, 7))).toEqual([false, true, true])
   })
-  it('drops a checkpoint whose word is not in the story, and repeated words', () => {
-    const raw = goodDraft()
-    raw.checkpoints.push(phonics('dragon', 3), phonics('Rocket', 4))
-    expect(parseStoryDraft(raw).checkpoints.map((q) => q.word)).toEqual(['rocket', 'planet', 'comet', 'landed'])
+  it('follows choices to a path and stops at an ending', () => {
+    expect(pathFor([], 7)).toEqual([0])
+    expect(pathFor([1, 0], 7)).toEqual([0, 2, 5])
+    expect(pathFor([0, 1, 1, 1], 7)).toEqual([0, 1, 4])
+    expect(pathFor([1, 1], 3)).toEqual([0, 2])
   })
-  it('moves a checkpoint asked too early to after the paragraph with its word', () => {
-    const raw = goodDraft()
-    raw.checkpoints[2].page = 0 // "comet" first appears on page 3
-    expect(parseStoryDraft(raw).checkpoints.find((q) => q.word === 'comet')?.afterParagraph).toBe(3)
-  })
-  it('never puts a checkpoint on the last page', () => {
-    const raw = goodDraft()
-    raw.checkpoints = [phonics('rocket', 8), phonics('Earth', 8)] // Earth is only on the last page
-    const d = parseStoryDraft(raw)
-    expect(d.checkpoints.map((q) => [q.word, q.afterParagraph])).toEqual([['rocket', 7]])
-  })
-  it('requires at least one phonics checkpoint', () => {
-    const raw = goodDraft()
-    raw.checkpoints = []
-    expect(() => parseStoryDraft(raw)).toThrow(/phonics/)
-  })
-  it('rejects an answer index outside the choices', () => {
-    const raw = goodDraft()
-    raw.comprehension[0].answerIndex = 5
-    expect(() => parseStoryDraft(raw)).toThrow(/answer/)
-  })
-  it('requires nine pages, each with a picture scene, and drops extras', () => {
-    const few = goodDraft()
-    few.pages = few.pages.slice(0, 8)
-    expect(() => parseStoryDraft(few)).toThrow(/9 pages/)
-    const noScene = goodDraft()
-    noScene.pages[4].scene = ''
-    expect(() => parseStoryDraft(noScene)).toThrow(/9 pages/)
-    const many = goodDraft()
-    many.pages.push({ text: 'Extra.', scene: 'Scene 10', alt: 'x' })
-    const d = parseStoryDraft(many)
-    expect(d.paragraphs).toHaveLength(9)
-    expect(d.panels.map((p) => p.scene)).toEqual(many.pages.slice(0, 9).map((p) => p.scene))
+  it('builds a five-question quiz for the branch read: 3 comprehension, then 2 pronunciation', () => {
+    const grade1 = parseStory(rawTree(3), 1).nodes
+    const q1 = quizFor(grade1, [0, 2])
+    expect(q1.map((q) => q.kind)).toEqual(['comprehension', 'comprehension', 'comprehension', 'phonics', 'phonics'])
+    expect(q1.map((q) => q.prompt).slice(0, 3)).toEqual(['n0 q1', 'n0 q2', 'n2 q1'])
+    const grade2 = parseStory(rawTree(7), 2).nodes
+    const q2 = quizFor(grade2, [0, 2, 6])
+    expect(q2.map((q) => q.prompt).slice(0, 3)).toEqual(['n0 q1', 'n2 q1', 'n6 q1'])
+    expect(q2.slice(3).map((q) => (q.kind === 'phonics' ? q.word : ''))).toEqual(['apple', 'garden'])
   })
 })
 
-describe('buildPages', () => {
-  it('makes one page per passage with its panel and its questions, then The End', () => {
-    const pages = buildPages(['a', 'b', 'c'], [{ afterParagraph: 1 }, { afterParagraph: 1 }], 3)
-    expect(pages).toEqual([
-      { kind: 'page', index: 0, text: 'a', panel: 0, questions: [] },
-      { kind: 'page', index: 1, text: 'b', panel: 1, questions: [0, 1] },
-      { kind: 'page', index: 2, text: 'c', panel: 2, questions: [] },
-      { kind: 'end' },
-    ])
+describe('parseStory', () => {
+  it('accepts a grade 1 tree: 3 nodes, a 3x2 sheet of 6 page pictures', () => {
+    const d = parseStory(rawTree(3), 1)
+    expect(d.layout).toBe('grid3x2')
+    expect(d.nodes).toHaveLength(3)
+    expect(d.nodes[0].choice?.options).toEqual(['Go left', 'Go right'])
+    expect(d.nodes[1].choice).toBeUndefined()
+    expect(d.nodes[2].pages.map((p) => p.panel)).toEqual([4, 5])
+    expect(d.panels.map((p) => p.scene)).toEqual(['scene 0.0', 'scene 0.1', 'scene 1.0', 'scene 1.1', 'scene 2.0', 'scene 2.1'])
   })
-  it('spreads fewer panels evenly (older six-panel stories) and none without a sheet', () => {
-    const placed = Array.from({ length: 9 }, (_, i) => panelFor(i, 9, 6))
-    expect(placed.filter((p) => p !== undefined)).toEqual([0, 1, 2, 3, 4, 5])
-    expect(panelFor(0, 9, 0)).toBeUndefined()
+  it('accepts a grade 2-3 tree: 7 nodes, a 4x4 sheet of 14 pages + cover + ending', () => {
+    const d = parseStory(rawTree(7), 3)
+    expect(d.layout).toBe('grid4x4')
+    expect(d.panels).toHaveLength(16)
+    expect(d.panels[14].scene).toBe('Pip on a hill')
+    expect(d.panels[15].scene).toBe('Pip asleep')
+    expect(d.nodes.filter((n) => n.choice)).toHaveLength(3)
+  })
+  it('drops a choice the writer put on an ending', () => {
+    const raw = rawTree(3)
+    ;(raw.nodes[1] as Record<string, unknown>).choice = { prompt: 'x', options: ['a', 'b'] }
+    expect(parseStory(raw, 1).nodes[1].choice).toBeUndefined()
+  })
+  it('rejects a tree that the reader could not follow', () => {
+    const short = rawTree(7)
+    short.nodes.pop()
+    expect(() => parseStory(short, 2)).toThrow(/7 parts/)
+    const noChoice = rawTree(3)
+    delete (noChoice.nodes[0] as Record<string, unknown>).choice
+    expect(() => parseStory(noChoice, 1)).toThrow(/choice/)
+    const onePage = rawTree(3)
+    onePage.nodes[2].pages.pop()
+    expect(() => parseStory(onePage, 1)).toThrow(/2 pages/)
+    const noScene = rawTree(3)
+    noScene.nodes[1].pages[0].scene = ''
+    expect(() => parseStory(noScene, 1)).toThrow(/picture/)
+  })
+  it('needs two comprehension questions on grade 1\'s beginning', () => {
+    const raw = rawTree(3)
+    raw.nodes[0].comprehension = [q3('only one')]
+    expect(() => parseStory(raw, 1)).toThrow(/2 comprehension/)
+  })
+  it('rejects a phonics word that is not in the story', () => {
+    const raw = rawTree(3)
+    raw.nodes[1].phonics = phon('dragon')
+    expect(() => parseStory(raw, 1)).toThrow(/not in the story/)
+  })
+  it('fits a story to pictures from the library, ignoring any new scenes', () => {
+    const existing = {
+      characters: 'Old characters.',
+      panels: Array.from({ length: 6 }, (_, i) => ({ scene: `saved ${i}`, alt: `saved alt ${i}` })),
+    }
+    const d = parseStory(rawTree(3, { scenes: false }), 1, existing)
+    expect(d.characters).toBe('Old characters.')
+    expect(d.panels.map((p) => p.scene)).toEqual(existing.panels.map((p) => p.scene))
+  })
+})
+
+describe('buildUserPrompt', () => {
+  const req = { grade: 2 as const, interests: ['space'], custom: [] }
+  it('spells out the tree, the page length, and pronunciation-only phonics', () => {
+    const prompt = buildUserPrompt(req)
+    expect(prompt).toContain('tree of 7 nodes')
+    expect(prompt).toContain('node 2: what happens after option 2 of node 0')
+    expect(prompt).toContain('node 6: what happens after option 2 of node 2; an ENDING')
+    expect(prompt).toContain('28-40 words')
+    expect(prompt).toContain('never ask how many syllables')
+  })
+  it('asks the writer to fit existing pictures instead of inventing scenes', () => {
+    const existing = { characters: 'Mia has red curls.', panels: Array.from({ length: 16 }, (_, i) => ({ scene: `pic ${i}`, alt: '' })) }
+    const prompt = buildUserPrompt(req, existing)
+    expect(prompt).toContain('ALREADY EXIST')
+    expect(prompt).toContain('node 6 page 2: pic 13')
   })
 })
 
@@ -159,8 +192,21 @@ function sheet(W: number, H: number, boxes: [number, number, number, number][]) 
 
 const G32 = { cols: 3, rows: 2 }
 const G33 = { cols: 3, rows: 3 }
+const G44 = { cols: 4, rows: 4 }
 
 describe('detectPanels', () => {
+  it('finds a 4x4 grid (grades 2-3: 14 pages, cover, ending)', () => {
+    const at = [10, 82, 154, 226]
+    const boxes = detectPanels(sheet(300, 300, at.flatMap((y) => at.map((x) => [x, y, 64, 64] as [number, number, number, number]))), G44)
+    expect(boxes).toHaveLength(16)
+    expect(boxes![15].x).toBeCloseTo(226 / 300, 1)
+  })
+  it('trims a square panel to a wider frame without stretching (cover fit)', () => {
+    const box = coverBox({ x: 0, y: 0, w: 0.25, h: 0.25 }, 1, 4 / 3)
+    expect(box.w).toBeCloseTo(0.25)
+    expect(box.h).toBeCloseTo(0.1875)
+    expect(box.y).toBeCloseTo(0.03125)
+  })
   it('finds a 3x3 grid whose outer margin is under 3% (bug seen on a real sheet)', () => {
     // Real sheet: 1024px with ~30px margins; scaled to 300px that is ~8px.
     const at = [8, 104, 200]

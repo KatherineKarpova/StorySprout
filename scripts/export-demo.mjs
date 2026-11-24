@@ -5,9 +5,9 @@
  *   node scripts/export-demo.mjs <storyId>
  *
  * Reads the story record from the LOCAL dev database (.wrangler state, made
- * by `deepspace dev`), downloads its panel sheet and Hope's phonics clips
- * from the owner's private app files with the DeepSpace CLI, rewrites their
- * paths to /demo/..., and writes public/demo/. Those become static assets on
+ * by `deepspace dev`), downloads its picture sheet (private, or from the
+ * public picture library) and Hope's phonics clips with the DeepSpace CLI,
+ * rewrites their paths to /demo/..., and writes public/demo/. Those become static assets on
  * the next deploy, so the sample costs nothing to serve. Run as the owner.
  */
 
@@ -37,36 +37,42 @@ const story = {
   interests: json(row.col_interests),
   status: 'ready',
   progressMessage: '',
-  paragraphs: json(row.col_paragraphs),
+  nodes: json(row.col_nodes),
   imagePaths: json(row.col_imagepaths),
   imageAlts: json(row.col_imagealts),
-  imageSlots: [],
   imageLayout: row.col_imagelayout ?? '',
-  questions: json(row.col_questions),
-  checkpoints: json(row.col_checkpoints),
-  soundWords: json(row.col_soundwords),
+  libraryId: '',
   wordCount: row.col_wordcount,
   error: '',
 }
+if (!story.nodes.length) throw new Error(`story ${storyId} has no story tree (made before choose-your-own-adventure)`)
 
 const outDir = 'public/demo'
 mkdirSync(outDir, { recursive: true })
 
-/** "/api/files/apps/<app>/users/<user>/stories/<id>/x.png?scope=self" → "/demo/x.png" */
+/**
+ * "/api/files/apps/<app>/users/<user>/stories/<id>/x.mp3?scope=self" (private)
+ * or "/api/files/apps/<app>/library/<id>.png?scope=app" (picture library)
+ * → "/demo/<file>", downloaded next to story.json.
+ */
 function localize(path) {
   if (!path) return path
-  const m = /\/users\/[^/]+\/(stories\/[^?]+)/.exec(path)
-  if (!m) throw new Error(`unexpected file path ${path}`)
-  const name = basename(m[1])
-  execFileSync('npx', ['deepspace', 'app', 'files', 'get', '--private', m[1], `--out=${join(outDir, name)}`], {
-    stdio: 'inherit',
-    shell: process.platform === 'win32',
-  })
+  const own = /\/users\/[^/]+\/(stories\/[^?]+)/.exec(path)
+  const shared = /\/apps\/[^/]+\/(library\/[^?]+)/.exec(path)
+  const key = own?.[1] ?? shared?.[1]
+  if (!key) throw new Error(`unexpected file path ${path}`)
+  const name = basename(key)
+  const args = ['deepspace', 'app', 'files', 'get', ...(own ? ['--private'] : []), key, `--out=${join(outDir, name)}`]
+  // npx is npx.cmd on Windows, which needs a shell; the arguments are fixed
+  // strings and keys from our own records, never user input.
+  execFileSync('npx', args, { stdio: 'inherit', shell: process.platform === 'win32' })
   return `/demo/${name}`
 }
 
 story.imagePaths = story.imagePaths.map(localize)
-story.checkpoints = story.checkpoints.map((c) => ({ ...c, audioPath: c.audioPath && localize(c.audioPath) }))
-story.soundWords = story.soundWords.map((w) => ({ ...w, audioPath: w.audioPath && localize(w.audioPath) }))
+story.nodes = story.nodes.map((n) => ({
+  ...n,
+  phonics: { ...n.phonics, audioPath: n.phonics.audioPath && localize(n.phonics.audioPath) },
+}))
 writeFileSync(join(outDir, 'story.json'), JSON.stringify(story, null, 2) + '\n')
 console.log(`exported "${story.title}" to ${outDir}/`)

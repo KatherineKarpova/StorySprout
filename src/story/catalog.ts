@@ -13,6 +13,12 @@ export interface ReadingLevel {
   blurb: string
   /** Guidance handed to the model. Plain words; it is a prompt, not UI copy. */
   guidance: string
+  /**
+   * Words per page: what fits the bottom half of a page at this grade's type
+   * size. A range for the writer, not an exact count; the reader shrinks the
+   * type a little if a page still overflows.
+   */
+  wordsPerPage: [number, number]
 }
 
 export const READING_LEVELS: ReadingLevel[] = [
@@ -23,6 +29,7 @@ export const READING_LEVELS: ReadingLevel[] = [
     blurb: 'Short sentences, lots of words I can sound out.',
     guidance:
       'First-grade reader. Sentences of 5-8 words. Mostly one- and two-syllable decodable words (CVC words, consonant blends, digraphs sh/ch/th, common sight words). Repeat key words so the reader meets them several times. Simple past or present tense. Lots of dialogue and action.',
+    wordsPerPage: [18, 28],
   },
   {
     grade: 2,
@@ -31,14 +38,16 @@ export const READING_LEVELS: ReadingLevel[] = [
     blurb: 'Longer sentences and a few new big words.',
     guidance:
       'Second-grade reader. Sentences of 7-12 words. Long-vowel patterns (silent e, vowel teams ai/ee/oa), r-controlled vowels, two-syllable words, a handful of richer vocabulary words that context makes clear. Clear beginning, middle, and end.',
+    wordsPerPage: [28, 40],
   },
   {
     grade: 3,
     label: 'Grade 3',
-    ages: 'Ages 8–9',
-    blurb: 'Bigger stories with paragraphs and new words.',
+    ages: 'Ages 8–10',
+    blurb: 'Bigger words and twistier stories.',
     guidance:
-      'Third-grade reader. Varied sentence length up to about 15 words. Multisyllable words, prefixes and suffixes (un-, re-, -ful, -ly), some figurative language. A small problem the character solves through their own choices, and a feeling that changes over the story.',
+      'Third- to fourth-grade reader. Varied sentences up to about 18 words, some with two clauses. Multisyllable and less common words (prefixes and suffixes like un-, re-, -tion, -ous, -ful), vivid verbs, some figurative language. A more complex storyline: a real problem, a clue or twist, characters with clear motives and feelings that change, and choices with consequences.',
+    wordsPerPage: [38, 52],
   },
 ]
 
@@ -82,6 +91,11 @@ export const DAILY_STORY_LIMIT = 2
  */
 export const APP_DAILY_STORY_LIMIT = 4
 
+/** Nodes in a story tree: one choice for grade 1, two for grades 2-3. */
+export function nodeCountFor(grade: number): 3 | 7 {
+  return grade === 1 ? 3 : 7
+}
+
 export type StoryStatus = 'queued' | 'writing' | 'illustrating' | 'recording' | 'ready' | 'failed'
 
 export interface PhonicsQuestion {
@@ -90,12 +104,13 @@ export interface PhonicsQuestion {
   word: string
   /** Sound-it-out chunks, e.g. ["drag", "on"]. */
   chunks: string[]
-  /** The phonics pattern in kid words, e.g. "The 'ph' makes the /f/ sound." */
+  /** The sound pattern in kid words, e.g. "The 'oa' says /oh/, like in boat." */
   tip: string
+  /** About how the word sounds: rhymes, matching sounds, vowel sounds. */
   prompt: string
   choices: string[]
   answerIndex: number
-  /** Served path of the spoken word, filled in by the job. */
+  /** Served path of Hope saying the word, filled in by the job. */
   audioPath?: string
 }
 
@@ -110,20 +125,34 @@ export interface ComprehensionQuestion {
 
 export type Question = PhonicsQuestion | ComprehensionQuestion
 
-/**
- * A phonics question shown as its own page inside the book, about the
- * longest, rarest, or hardest word in the ~100 words just read.
- */
-export interface CheckpointQuestion extends PhonicsQuestion {
-  /** Paragraph index the question follows. */
-  afterParagraph: number
+/** One book page: the top half is a picture panel, the bottom half this text. */
+export interface StoryPage {
+  text: string
+  /** Panel index in the story's picture sheet. */
+  panel: number
 }
 
-export interface SoundWord {
-  word: string
-  chunks: string[]
-  audioPath?: string
+/** The "what should they do next?" page after a node that is not an ending. */
+export interface StoryChoice {
+  prompt: string
+  /** Option 0 leads to child node 2i+1, option 1 to child node 2i+2. */
+  options: [string, string]
 }
+
+/**
+ * One node of the choose-your-own-adventure tree: two pages, then (unless it
+ * is an ending) a choice. Nodes are stored in heap order: node i's children
+ * are 2i+1 and 2i+2. Each node carries the questions about what happens in
+ * it, so the end quiz is built from the branch the child actually read.
+ */
+export interface StoryNode {
+  pages: [StoryPage, StoryPage]
+  choice?: StoryChoice
+  phonics: PhonicsQuestion
+  comprehension: ComprehensionQuestion[]
+}
+
+export type ImageLayout = '' | 'grid3x2' | 'grid4x4'
 
 export interface StoryRecord {
   title: string
@@ -132,31 +161,25 @@ export interface StoryRecord {
   status: StoryStatus
   /** Human-readable stage for the reader while the job runs. */
   progressMessage: string
-  paragraphs: string[]
-  /**
-   * Served image paths. With a grid imageLayout this is one sheet of panels
-   * (imageAlts has one alt per panel): 'grid3x3' is one picture per page,
-   * 'grid3x2' an earlier six-panel format; older stories hold a single
-   * picture. Empty until illustrated.
-   */
+  /** The story tree: 3 nodes (grade 1) or 7 (grades 2-3). Empty until written. */
+  nodes: StoryNode[]
+  /** The picture sheet (one path), once painted or taken from the library. */
   imagePaths: string[]
-  imageLayout: '' | 'grid3x2' | 'grid3x3'
+  imageLayout: ImageLayout
+  /** One alt text per panel in the sheet. */
   imageAlts: string[]
-  /** Paragraph index each picture follows, parallel to imagePaths. */
-  imageSlots: number[]
-  /** End-of-story questions: three reading comprehension questions. */
-  questions: Question[]
-  /** In-book phonics questions, about one per 100 words. */
-  checkpoints: CheckpointQuestion[]
-  /** Legacy: stories made before in-book phonics. New stories leave it empty. */
-  soundWords: SoundWord[]
+  /** Picture-library entry this story's pictures came from or were saved as. */
+  libraryId: string
+  /** Words across the whole tree (a single path reads about a third to half). */
   wordCount: number
   error: string
 }
 
 export interface QuizAttemptRecord {
   storyId: string
-  /** Chosen answer per question: in-book checkpoints first, then the end quiz. */
+  /** Node indices of the branch the child read, root first. */
+  path: number[]
+  /** Chosen answer per end-of-story question. */
   answers: number[]
   correct: number
   total: number
