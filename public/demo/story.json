@@ -1,0 +1,352 @@
+{
+  "title": "Lila and the Starlight Cat",
+  "grade": 2,
+  "interests": [
+    "space",
+    "magic",
+    "Cats"
+  ],
+  "status": "ready",
+  "progressMessage": "",
+  "nodes": [
+    {
+      "pages": [
+        {
+          "text": "One night, Lila and her cat Moss went into the backyard. Suddenly, a tiny light blinked near the roses. It was Pip, a fairy with silver wings. \"My star fell down from the sky,\" Pip said sadly.",
+          "panel": 0
+        },
+        {
+          "text": "Lila knelt down in the wet grass. Under a leaf, a tiny star was glowing softly. \"We can help you,\" Lila whispered to Pip. Pip sprinkled sparkle dust on Moss, and he grew big and fluffy.",
+          "panel": 1
+        }
+      ],
+      "choice": {
+        "prompt": "What should Lila do next?",
+        "options": [
+          "Ride Moss up into the sky.",
+          "Follow Pip into the fairy garden."
+        ]
+      },
+      "phonics": {
+        "kind": "phonics",
+        "word": "roses",
+        "chunks": [
+          "ro",
+          "zez"
+        ],
+        "tip": "In roses, the s sounds like a buzzing z, not a hiss.",
+        "prompt": "What sound does the s make in roses?",
+        "choices": [
+          "a buzzing z",
+          "a hissing s",
+          "a soft sh"
+        ],
+        "answerIndex": 0,
+        "audioPath": "/demo/phonics-0.mp3"
+      },
+      "comprehension": [
+        {
+          "kind": "comprehension",
+          "prompt": "What did Pip say had fallen from the sky?",
+          "explanation": "Pip said, \"My star fell down from the sky,\" in the first part of the page.",
+          "choices": [
+            "a rose",
+            "a star",
+            "a cat"
+          ],
+          "answerIndex": 1
+        }
+      ]
+    },
+    {
+      "pages": [
+        {
+          "text": "Moss zoomed up past the clouds with Lila holding tight. Pip flew beside them, carrying the little star. Soon they floated among twinkling stars and spinning planets. Moss purred happily as they floated higher and higher.",
+          "panel": 2
+        },
+        {
+          "text": "Ahead, a big planet with shiny rings floated in the dark. Off to the side, a quiet moon glowed soft and white. \"Which way should we go?\" Pip asked, twirling her wings.",
+          "panel": 3
+        }
+      ],
+      "choice": {
+        "prompt": "What should Lila do next?",
+        "options": [
+          "Sail to the ringed planet.",
+          "Land on the glowing moon."
+        ]
+      },
+      "phonics": {
+        "kind": "phonics",
+        "word": "higher",
+        "chunks": [
+          "hi",
+          "er"
+        ],
+        "tip": "In higher, the i says its long name, like the i in high.",
+        "prompt": "Which word has the same long i sound as higher?",
+        "choices": [
+          "pot",
+          "bed",
+          "fly"
+        ],
+        "answerIndex": 2,
+        "audioPath": "/demo/phonics-1.mp3"
+      },
+      "comprehension": [
+        {
+          "kind": "comprehension",
+          "prompt": "Which planet had shiny rings?",
+          "explanation": "Ahead, a big planet with shiny rings floated in the dark.",
+          "choices": [
+            "the moon",
+            "the ringed planet",
+            "a tiny rose"
+          ],
+          "answerIndex": 1
+        }
+      ]
+    },
+    {
+      "pages": [
+        {
+          "text": "Pip led Lila and Moss through a gate of twisting vines. Inside the fairy garden glowed with pink and gold flowers. Tiny fairies waved hello from the flower bells. Everything smelled sweet, like honey and rain.",
+          "panel": 4
+        },
+        {
+          "text": "In the middle, a tall sunflower reached up toward the sky. Its golden top was lost in the clouds. Beside a pond, a wise old frog sat on a lily pad. \"Hello, little friends,\" croaked the frog kindly.",
+          "panel": 5
+        }
+      ],
+      "choice": {
+        "prompt": "What should Lila do next?",
+        "options": [
+          "Climb the tall sunflower toward the sky.",
+          "Ask the wise frog for help."
+        ]
+      },
+      "phonics": {
+        "kind": "phonics",
+        "word": "flower",
+        "chunks": [
+          "flow",
+          "er"
+        ],
+        "tip": "In flower, the ow sounds like the ow in cow.",
+        "prompt": "What sound does ow make in flower?",
+        "choices": [
+          "ow, like in cow",
+          "long o, like in go",
+          "oo, like in moon"
+        ],
+        "answerIndex": 0,
+        "audioPath": "/demo/phonics-2.mp3"
+      },
+      "comprehension": [
+        {
+          "kind": "comprehension",
+          "prompt": "Where did Pip lead Lila and Moss?",
+          "explanation": "Pip led Lila and Moss through a gate of twisting vines into the fairy garden.",
+          "choices": [
+            "into a fairy garden",
+            "to a sandy beach",
+            "up a snowy hill"
+          ],
+          "answerIndex": 0
+        }
+      ]
+    },
+    {
+      "pages": [
+        {
+          "text": "Lila and Moss sailed to the ringed planet. Its shiny rings sparkled like a giant hoop of ice. Pip spotted an empty gap between the rings. \"That is where my star belongs,\" she cheered.",
+          "panel": 6
+        },
+        {
+          "text": "Lila gently set the little star into the gap. It glowed brighter and brighter, then sparkled into place. Moss purred, and Pip giggled with joy. The little star was home, shining bright in the sky.",
+          "panel": 7
+        }
+      ],
+      "phonics": {
+        "kind": "phonics",
+        "word": "gently",
+        "chunks": [
+          "gent",
+          "ly"
+        ],
+        "tip": "The g in gently sounds soft, like the j in jam.",
+        "prompt": "What sound does the g make in gently?",
+        "choices": [
+          "a hard g sound",
+          "a soft j sound",
+          "a silent sound"
+        ],
+        "answerIndex": 1,
+        "audioPath": "/demo/phonics-3.mp3"
+      },
+      "comprehension": [
+        {
+          "kind": "comprehension",
+          "prompt": "What did Pip find between the rings?",
+          "explanation": "Pip spotted an empty gap between the rings.",
+          "choices": [
+            "a green frog",
+            "an empty gap",
+            "a big cake"
+          ],
+          "answerIndex": 1
+        }
+      ]
+    },
+    {
+      "pages": [
+        {
+          "text": "Lila and Moss landed softly on the glowing moon. The ground was dusty and silver, and it crunched like sugar. Moss bounced high, making little puffs of moon dust. \"Let's rest here,\" Lila yawned, rubbing her eyes.",
+          "panel": 8
+        },
+        {
+          "text": "A soft crater made a perfect bed. Lila curled up with Moss, and Pip tucked a blanket of starlight over them. Soon they all drifted into sweet dreams. Above them, the Earth glowed blue like a bright marble.",
+          "panel": 9
+        }
+      ],
+      "phonics": {
+        "kind": "phonics",
+        "word": "bounced",
+        "chunks": [
+          "bounc",
+          "ed"
+        ],
+        "tip": "In bounced, the ou says ow, like the ou in cloud.",
+        "prompt": "Which word has the same ou sound as bounced?",
+        "choices": [
+          "soup",
+          "rope",
+          "found"
+        ],
+        "answerIndex": 2,
+        "audioPath": "/demo/phonics-4.mp3"
+      },
+      "comprehension": [
+        {
+          "kind": "comprehension",
+          "prompt": "What did Lila and Moss rest in?",
+          "explanation": "A soft crater made a perfect bed.",
+          "choices": [
+            "a soft crater bed",
+            "a wooden boat",
+            "a pile of leaves"
+          ],
+          "answerIndex": 0
+        }
+      ]
+    },
+    {
+      "pages": [
+        {
+          "text": "Lila grabbed the sunflower's thick green stem and began to climb. Moss hopped up behind her, tail held high. Up and up they went, past buzzing bees and bright yellow petals. At the very top, the view was amazing.",
+          "panel": 10
+        },
+        {
+          "text": "Lila could see the whole fairy garden, glowing like a quilt of flowers. Pip waved from below, and the fairies cheered. Then Lila slid down a soft petal slide. Everyone shared warm honey tea and giggled.",
+          "panel": 11
+        }
+      ],
+      "phonics": {
+        "kind": "phonics",
+        "word": "garden",
+        "chunks": [
+          "gar",
+          "den"
+        ],
+        "tip": "In garden, the ar sounds like the ar in car.",
+        "prompt": "What sound do the letters ar make in garden?",
+        "choices": [
+          "air, like in chair",
+          "ar, like in car",
+          "ur, like in fur"
+        ],
+        "answerIndex": 1,
+        "audioPath": "/demo/phonics-5.mp3"
+      },
+      "comprehension": [
+        {
+          "kind": "comprehension",
+          "prompt": "How did Lila get to the top of the sunflower?",
+          "explanation": "Lila grabbed the sunflower's thick green stem and began to climb.",
+          "choices": [
+            "She climbed the stem",
+            "She rode a bird",
+            "She flew with wings"
+          ],
+          "answerIndex": 0
+        }
+      ]
+    },
+    {
+      "pages": [
+        {
+          "text": "Lila asked the wise frog how to help Pip. The frog smiled, blinked his big eyes, and hopped to the pond's edge. \"Look down,\" he croaked. Lila peeked in and saw stars shining in the water.",
+          "panel": 12
+        },
+        {
+          "text": "The frog said the stars were always home in the pond and sky. Pip giggled, and her silver wings glowed bright. Moss curled up on a soft leaf, purring. The four friends watched the stars until they fell asleep.",
+          "panel": 13
+        }
+      ],
+      "phonics": {
+        "kind": "phonics",
+        "word": "croaked",
+        "chunks": [
+          "kroakt"
+        ],
+        "tip": "In croaked, the oa says its long o sound, like the oa in boat.",
+        "prompt": "Which word has the same oa sound as croaked?",
+        "choices": [
+          "coat",
+          "cap",
+          "cup"
+        ],
+        "answerIndex": 0,
+        "audioPath": "/demo/phonics-6.mp3"
+      },
+      "comprehension": [
+        {
+          "kind": "comprehension",
+          "prompt": "What did the wise frog show Lila?",
+          "explanation": "Lila peeked in and saw stars shining in the water.",
+          "choices": [
+            "stars in the pond",
+            "a big cake",
+            "a red kite"
+          ],
+          "answerIndex": 0
+        }
+      ]
+    }
+  ],
+  "imagePaths": [
+    "/demo/pictures.jpg"
+  ],
+  "imageAlts": [
+    "Lila and her gray cat Moss stand in a dark backyard while a tiny silver-winged fairy glows near the roses.",
+    "Lila kneels by a glowing star under a leaf while Pip sprinkles sparkle dust on Moss, who grows big.",
+    "Moss flies past clouds into space with Lila holding on and Pip carrying a glowing star nearby.",
+    "In dark space, a ringed planet floats ahead and a glowing white moon sits to the side of Moss, Lila, and Pip.",
+    "Lila and Moss walk through a vine gate into a sparkly garden full of pink and gold flowers and waving fairies.",
+    "A tall sunflower reaches into the clouds while a wise frog sits on a lily pad beside a pond.",
+    "Lila, Moss, and Pip float beside a sparkly ringed planet, and Pip points to an empty gap in the rings.",
+    "Lila places a glowing star into the planet's rings, and the star shines brightly while Pip giggles.",
+    "Lila and Moss stand on the silvery moon as Moss bounces and puffs of dust rise around them.",
+    "Lila and Moss sleep in a soft moon crater under a starlight blanket while a blue Earth glows above.",
+    "Lila and Moss climb a tall sunflower stem past bees and yellow petals.",
+    "Lila slides down a soft petal slide from a sunflower while fairies cheer in the glowing garden.",
+    "Lila kneels at a pond while a wise frog points at stars shining in the water.",
+    "Lila, Pip, Moss, and the frog sit by a pond at night, watching the stars reflected in the water.",
+    "Cover picture for Lila and the Starlight Cat",
+    "The end of the story"
+  ],
+  "imageLayout": "grid4x4",
+  "libraryId": "",
+  "wordCount": 509,
+  "error": ""
+}

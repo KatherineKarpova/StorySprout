@@ -44,13 +44,16 @@ import { recordSpeech } from './story/voice'
 export const STORY_MODEL = 'claude-haiku-5-5'
 
 /**
- * Sheet settings per layout. The 3×2 sheet's panels are ~340px at 1K, fine
- * for half a page. A 4×4 sheet at 1K would give ~250px panels, too soft for
- * half a page, so it is drawn at 2K with a model that supports 2K.
+ * Sheet settings per layout, both at 1K with the standard-priced model.
+ * Measured: a 4×4 sheet at 2K (gemini-3.1-flash-image-preview) cost $0.72,
+ * ~11× the 1K sheet's ~$0.065, which on the free tier's 500 credits meant
+ * only a handful of grade 2-3 stories. At 1K the 4×4 panels are ~256px and
+ * a little softer on half a page; a side-by-side check judged that
+ * acceptable for the watercolor style.
  */
 const SHEETS: Record<Exclude<ImageLayout, ''>, { model: string; aspectRatio: string; imageSize?: string }> = {
   grid3x2: { model: 'gemini-2.5-flash-image', aspectRatio: '3:2' },
-  grid4x4: { model: 'gemini-3.1-flash-image-preview', aspectRatio: '1:1', imageSize: '2K' },
+  grid4x4: { model: 'gemini-2.5-flash-image', aspectRatio: '1:1' },
 }
 
 const JOB_DEADLINE_MS = 8 * 60 * 1000
@@ -266,6 +269,9 @@ async function writeStory(
       return parseStory(extractJson(text), p.grade, existing)
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err)
+      // Logged so a recurring validation failure (each retry is a paid call)
+      // shows up in `deepspace logs`, not only when both attempts fail.
+      console.warn(`[story ${p.storyId}] draft ${attempt + 1} rejected: ${lastError}`)
       messages.push(
         { role: 'assistant', content: text },
         {
