@@ -3,10 +3,12 @@
  * questions about the branch the child read, then two pronunciation
  * questions (hear the word first, answer, then the tip). The finished
  * attempt, with the branch, is saved to `quiz_attempts` with the reader's
- * own RBAC.
+ * own RBAC, by <SaveAttempt>, which is only mounted when there is a score to
+ * save: the public demo's signed-out visitor has no records scope, so even
+ * calling useMutations there throws.
  */
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutations } from 'deepspace'
 import { RotateCcw, Star } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -27,10 +29,10 @@ interface Props {
 }
 
 export function Quiz({ storyId, path, questions, newStoryHref, saveAttempt = true }: Props) {
-  const { create, ready } = useMutations<QuizAttemptRecord>('quiz_attempts')
   const [step, setStep] = useState(0)
   const [answers, setAnswers] = useState<(number | null)[]>(() => questions.map(() => null))
-  const [saved, setSaved] = useState(false)
+  // Bumped by "try again", so each finished round saves its own attempt.
+  const [round, setRound] = useState(0)
 
   const done = step >= questions.length
   const correct = answers.filter((a, i) => a === questions[i]?.answerIndex).length
@@ -42,23 +44,24 @@ export function Quiz({ storyId, path, questions, newStoryHref, saveAttempt = tru
   }
 
   function next() {
-    const nextStep = step + 1
-    setStep(nextStep)
-    if (saveAttempt && nextStep >= questions.length && !saved && ready) {
-      setSaved(true)
-      create({ storyId, path, answers: answers.map((a) => a ?? -1), correct, total })
-    }
+    setStep(step + 1)
   }
 
   function restart() {
     setAnswers(questions.map(() => null))
-    setSaved(false)
+    setRound((r) => r + 1)
     setStep(0)
   }
 
   if (done) {
     return (
       <section className="sprout-pop rounded-3xl border-2 border-border bg-card p-6 text-center sm:p-10" data-testid="quiz-done">
+        {saveAttempt && (
+          <SaveAttempt
+            key={round}
+            attempt={{ storyId, path, answers: answers.map((a) => a ?? -1), correct, total }}
+          />
+        )}
         <div className="flex flex-wrap justify-center gap-1.5" aria-hidden>
           {Array.from({ length: total }, (_, i) => (
             <Star key={i} className={cn('h-10 w-10', i < correct ? 'fill-[#f5b301] text-[#f5b301]' : 'text-border')} />
@@ -129,4 +132,19 @@ export function Quiz({ storyId, path, questions, newStoryHref, saveAttempt = tru
       )}
     </section>
   )
+}
+
+/**
+ * Saves one finished quiz, once, as soon as the records connection can take
+ * writes (a write before `ready` would be rejected client-side).
+ */
+function SaveAttempt({ attempt }: { attempt: QuizAttemptRecord }) {
+  const { create, ready } = useMutations<QuizAttemptRecord>('quiz_attempts')
+  const saved = useRef(false)
+  useEffect(() => {
+    if (!ready || saved.current) return
+    saved.current = true
+    create(attempt)
+  }, [ready, create, attempt])
+  return null
 }
