@@ -1,0 +1,35 @@
+/*
+ * StorySprout theme — "meadow": warm storybook paper, sprout green, coral.
+ * Applied via <html data-theme="meadow"> in index.html. Contrast checked for
+ * body text (foreground on background ≈ 13:1) and primary buttons (≈ 5:1),
+ * because the readers are still learning letters.
+ */
+[data-theme="meadow"] {
+  color-scheme: light;
+  --color-background: #fff8ec;
+  --color-foreground: #2a2838;
+  --color-card: #ffffff;
+  --color-card-foreground: #2a2838;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #2a2838;
+  --color-primary: #2f7d4f;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #ffe3d3;
+  --color-secondary-foreground: #7a2e12;
+  --color-muted: #f6ecd9;
+  --color-muted-foreground: #6b6577;
+  --color-accent: #fff0c2;
+  --color-accent-foreground: #5a4200;
+  --color-destructive: #c2410c;
+  --color-destructive-foreground: #ffffff;
+  --color-border: #ead9bd;
+  --color-input: #e2cfae;
+  --color-ring: #2f7d4f;
+  --radius: 1rem;
+  --shadow-card: 0 1px 0 0 #ead9bd, 0 6px 18px -8px rgba(90, 60, 20, 0.18);
+  --shadow-card-hover: 0 1px 0 0 #ead9bd, 0 10px 24px -8px rgba(90, 60, 20, 0.26);
+  --color-shell: #fff8ec;
+  --color-shell-panel: #ffffff;
+  --color-coral: #e8613c;
+  --color-sky: #3b82c4;
+}
