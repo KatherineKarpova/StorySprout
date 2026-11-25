@@ -17,12 +17,21 @@ import { decodeDataUrl } from './prompts'
  */
 export const VOICE_ID = 'cVd39cx0VtXNC13y5Y7z'
 
+/**
+ * English-only model. The multilingual model guesses the language from the
+ * text, and a lone word is ambiguous: "Sage" came out German/Arabic-sounding.
+ * Checked by transcribing a recording of "sage." with Whisper: multilingual
+ * → "ساقة", turbo_v2 / flash_v2 → "Sage.". Part of the word-cache key, so
+ * changing it re-records words instead of serving old clips.
+ */
+export const VOICE_MODEL = 'eleven_turbo_v2'
+
 /** Speak `text` in Hope's voice; returns the mp3 as a Blob ready to store. */
 export async function recordSpeech(tools: ActionTools, text: string): Promise<Blob> {
   const r = await tools.integration<{ audioUrl: string }>('elevenlabs/generate-speech', {
     text,
     voice_id: VOICE_ID,
-    model_id: 'eleven_multilingual_v2',
+    model_id: VOICE_MODEL,
     output_format: 'mp3_44100_64',
     // A little style for a lively, storybook delivery; stability stays high
     // enough that the word itself is pronounced plainly.

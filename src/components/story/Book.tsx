@@ -401,10 +401,14 @@ function PageText({
   async function tap(key: string, token: string) {
     const word = token.replace(/^[^\p{L}]+|[^\p{L}]+$/gu, '')
     if (!word) return
+    // The shared word cache first (one word, English-only voice): older
+    // stories recorded their own phonics clips with a model that
+    // mispronounced lone names (e.g. "Sage"). The story's clip is the
+    // fallback, e.g. for a signed-out visitor on the public sample.
     const pw = practice.get(norm(word))
-    setActive({ key, loading: !pw?.audioPath })
+    setActive({ key, loading: true })
     try {
-      await hearWord(word, pw?.audioPath)
+      await hearWord(word).catch((err) => (pw?.audioPath ? hearWord(word, pw.audioPath) : Promise.reject(err)))
     } catch (err) {
       warning('Hmm!', err instanceof Error ? err.message : 'That word would not play.')
     } finally {

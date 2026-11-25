@@ -23,7 +23,7 @@ import {
 import { createActionTools } from '../server/action-routes'
 import { generateStory, ownerOutKey } from '../jobs'
 import { decodeDataUrl, normalizeRequest, normalizeWord, panelGridPrompt, wordClipId } from '../story/prompts'
-import { VOICE_ID, recordSpeech } from '../story/voice'
+import { VOICE_ID, VOICE_MODEL, recordSpeech } from '../story/voice'
 
 /** New (uncached) word recordings, per UTC day. ~$0.005 each on the free tier. */
 const WORDS_PER_READER_PER_DAY = 50
@@ -208,7 +208,7 @@ export const actions: Record<string, ActionHandler<Env>> = {
     if (userId.startsWith('anon-')) return { success: false, error: 'Sign in to hear words.' }
     const word = normalizeWord(params.word)
     if (!word) return { success: false, error: 'That is not a word I can say.' }
-    const id = `${VOICE_ID}-${wordClipId(word)}`
+    const id = `${VOICE_ID}-${VOICE_MODEL}-${wordClipId(word)}`
 
     const cached = await tools.get('word_clips', id)
     if (cached.success) {
@@ -237,7 +237,7 @@ export const actions: Record<string, ActionHandler<Env>> = {
       // App scope: public, shared by every reader. A pronunciation is not
       // private data, and sharing it is what makes the cache work.
       const stored = await appFiles(env, { scope: 'app', userId }).upload(clip, {
-        key: `words/${VOICE_ID}/${wordClipId(word)}.mp3`,
+        key: `words/${VOICE_ID}/${VOICE_MODEL}/${wordClipId(word)}.mp3`,
         name: `${word}.mp3`,
       })
       await tools.create('word_clips', { word, voiceId: VOICE_ID, path: stored.path }, id)
