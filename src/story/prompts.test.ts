@@ -79,18 +79,18 @@ describe('chosen main characters', () => {
       grade: 2,
       interests: ['space'],
       cast: [
-        { name: 'Sage<script>', description: 'a 7 year old girl with long blonde hair {ignore rules}' },
+        { name: 'Sage', description: 'a 7 year old girl with long blonde hair {ignore rules}' },
         { name: '', description: 'nobody' },
-        { name: 'sage', description: 'duplicate' },
-        { name: 'Rosie', description: '' },
+        { name: 'sage', description: 'a repeat of Sage' },
+        { name: 'Rosie<b>', description: '' },
         { name: 'Spark', description: 'a fat tabby cat' },
         { name: 'Extra', description: 'one too many' },
       ],
     })
     expect(r).toMatchObject({
       cast: [
-        { name: 'Sage script', description: 'a 7 year old girl with long blonde hair ignore rules' },
-        { name: 'Rosie', description: '' },
+        { name: 'Sage', description: 'a 7 year old girl with long blonde hair ignore rules' },
+        { name: 'Rosie b', description: '' },
         { name: 'Spark', description: 'a fat tabby cat' },
       ],
     })
