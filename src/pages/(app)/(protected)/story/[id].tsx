@@ -125,7 +125,16 @@ export default function StoryPage() {
         <>
           <Reader story={s} storyId={story.recordId} newStoryHref={retryHref} />
 
-          {isOwner && ready && !s.hiRes && s.imageLayout && <RedrawPictures storyId={story.recordId} />}
+          {isOwner && ready && s.imageLayout && (
+            <RedrawPictures
+              storyId={story.recordId}
+              redrawn={!!s.hiRes}
+              // Saved character sheet, or (older stories) the ideas typed for it.
+              defaultCharacters={
+                s.characters || (s.interests ?? []).filter((i) => !INTERESTS.some((c) => c.id === i)).join('. ')
+              }
+            />
+          )}
 
           <div className="mt-16 flex justify-center">
             {confirmDelete ? (
@@ -203,7 +212,16 @@ function CenteredNote({ children }: { children: React.ReactNode }) {
  * Owner-only upgrade: redraw this story's pictures at 2K. Costs about 70
  * credits, so it asks first; the new pictures arrive in the open book live.
  */
-function RedrawPictures({ storyId }: { storyId: string }) {
+function RedrawPictures({
+  storyId,
+  redrawn,
+  defaultCharacters,
+}: {
+  storyId: string
+  redrawn: boolean
+  defaultCharacters: string
+}) {
+  const [characters, setCharacters] = useState(defaultCharacters)
   const [confirm, setConfirm] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -211,7 +229,7 @@ function RedrawPictures({ storyId }: { storyId: string }) {
   async function redraw() {
     setBusy(true)
     setError(null)
-    const r = await runAction('redrawPictures', { storyId })
+    const r = await runAction('redrawPictures', { storyId, characters })
     setBusy(false)
     setConfirm(false)
     if (!r.success) setError(r.error)
@@ -219,7 +237,19 @@ function RedrawPictures({ storyId }: { storyId: string }) {
 
   return (
     <div className="mx-auto mt-12 max-w-xl rounded-2xl border-2 border-dashed border-border p-4 text-center text-[15px]">
-      <p className="font-semibold text-foreground">Owner tools</p>
+      <p className="font-semibold text-foreground">Owner tools{redrawn && ' · pictures already redrawn at 2K'}</p>
+      <label className="mt-3 block text-left text-sm font-semibold text-foreground" htmlFor="redraw-characters">
+        How should the characters look in every picture?
+      </label>
+      <textarea
+        id="redraw-characters"
+        value={characters}
+        maxLength={400}
+        rows={3}
+        onChange={(e) => setCharacters(e.target.value)}
+        placeholder="Sage is a 7 year old girl with long blonde hair and blue eyes, in a yellow sweater. Her grandma has curly blonde hair."
+        className="mt-1 w-full rounded-xl border-2 border-input bg-card p-3 text-[15px] text-foreground outline-none focus:border-primary"
+      />
       {confirm ? (
         <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
           <span className="text-muted-foreground">Redraw all pictures at 2K for about 70 credits?</span>

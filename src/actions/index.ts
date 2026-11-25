@@ -63,6 +63,11 @@ async function loadOwnStory(tools: ActionTools, userId: string, storyId: unknown
 const READER_PAID_DAILY_LIMIT = 5
 const OWNER_PAUSED_ID = 'owner-paused'
 
+/** Owner-typed character description: plain text, one paragraph, ≤400 chars. */
+function cleanCustomLong(value: unknown): string {
+  return typeof value === 'string' ? value.replace(/[<>{}]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 400) : ''
+}
+
 /** False when the owner switched paying off, or ran out of credits today. */
 async function ownerPaysNow(tools: ActionTools): Promise<boolean> {
   const day = new Date().toISOString().slice(0, 10)
@@ -318,13 +323,16 @@ export const actions: Record<string, ActionHandler<Env>> = {
       return { success: false, error: 'This story has no pictures to redraw yet.' }
     }
     const scenes = s.scenes?.length ? s.scenes : (s.imageAlts ?? [])
+    // The owner's description wins (e.g. to fix a hair color the model got
+    // wrong); then the saved character sheet. Saved for the next redraw.
+    const characters = cleanCustomLong(params.characters) || s.characters || ''
     if (scenes.length < (layout === 'grid4x4' ? 16 : 6)) return { success: false, error: 'This story is missing picture descriptions.' }
 
     const r = await tools.integration<{ base64Images: string[] }>('gemini/generate-image', {
       model: 'gemini-3.1-flash-image-preview',
       imageSize: '2K',
       aspectRatio: layout === 'grid4x4' ? '1:1' : '3:2',
-      prompt: panelGridPrompt(s.characters ?? '', scenes, layout),
+      prompt: panelGridPrompt(characters, scenes, layout),
     })
     if (!r.success) {
       console.error(`[redrawPictures] story=${story.recordId} failed: ${r.error}`)
@@ -340,7 +348,7 @@ export const actions: Record<string, ActionHandler<Env>> = {
       key: `stories/${story.recordId}/pictures-2k.${ext}`,
       name: `pictures-2k.${ext}`,
     })
-    const updated = await tools.update('stories', story.recordId, { imagePaths: [stored.path], hiRes: true })
+    const updated = await tools.update('stories', story.recordId, { imagePaths: [stored.path], hiRes: true, characters })
     if (!updated.success) return { success: false, error: updated.error }
     console.info(`[redrawPictures] story=${story.recordId} redrawn at 2K`)
     return { success: true, data: { storyId: story.recordId } }
