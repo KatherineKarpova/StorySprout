@@ -11,7 +11,7 @@ import {
   wordClipId,
 } from './prompts'
 import { coverBox, detectPanels, evenPanels } from './panels'
-import { childrenOf, isEnding, pathFor, quizFor } from './tree'
+import { childrenOf, effectiveLayout, isEnding, pathFor, quizFor } from './tree'
 import { replyText } from '../jobs'
 
 const q3 = (prompt: string) => ({ prompt, choices: ['a', 'b', 'c'], answerIndex: 1, explanation: 'x' })
@@ -147,6 +147,13 @@ describe('tree', () => {
     expect(childrenOf(2)).toEqual([5, 6])
     expect([0, 1, 2].map((i) => isEnding(i, 3))).toEqual([false, true, true])
     expect([2, 3, 6].map((i) => isEnding(i, 7))).toEqual([false, true, true])
+  })
+  it('works out a lost picture layout from the grade (repair for a failed save)', () => {
+    const nodes = parseStory(rawTree(7), 3).nodes
+    expect(effectiveLayout({ imageLayout: '', imagePaths: ['/x.png'], nodes, grade: 3 })).toBe('grid4x4')
+    expect(effectiveLayout({ imageLayout: '', imagePaths: ['/x.png'], nodes, grade: 1 })).toBe('grid3x2')
+    expect(effectiveLayout({ imageLayout: 'grid3x2', imagePaths: ['/x.png'], nodes, grade: 3 })).toBe('grid3x2')
+    expect(effectiveLayout({ imageLayout: '', imagePaths: [], nodes, grade: 3 })).toBe('')
   })
   it('follows choices to a path and stops at an ending', () => {
     expect(pathFor([], 7)).toEqual([0])

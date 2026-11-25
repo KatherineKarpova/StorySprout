@@ -12,7 +12,7 @@ import { Button, Switch } from '@/components/ui'
 import { runAction } from '@/lib/actions'
 import { Panel } from '@/components/story/Panel'
 import { gridFor } from '@/story/panels'
-import { coverPanel } from '@/story/tree'
+import { coverPanel, effectiveLayout } from '@/story/tree'
 import { cn } from '@/lib/utils'
 import { DAILY_STORY_LIMIT, OWNER_PAYS, READER_PAID_DAILY_LIMIT, interestLabel, levelFor, type QuizAttemptRecord, type StoryRecord } from '@/story/catalog'
 
@@ -127,12 +127,12 @@ function Shelf() {
                   className="group block overflow-hidden rounded-3xl border-2 border-border bg-card transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-[0_12px_28px_-12px_rgba(90,60,20,0.3)]"
                 >
                   <div className="aspect-[4/3] bg-muted">
-                    {cover && gridFor(s.imageLayout) ? (
+                    {cover && gridFor(effectiveLayout(s)) ? (
                       // Cover = the sheet's cover panel (or its first picture), cropped to the card.
                       <Panel
                         src={cover}
-                        grid={gridFor(s.imageLayout)!}
-                        index={coverPanel(s.imageLayout)}
+                        grid={gridFor(effectiveLayout(s))!}
+                        index={coverPanel(effectiveLayout(s))}
                         aspect={4 / 3}
                         alt=""
                         className="h-full w-full"

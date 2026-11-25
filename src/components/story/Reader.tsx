@@ -8,7 +8,7 @@
 import { useMemo, useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import { levelFor, type StoryRecord } from '@/story/catalog'
-import { pathFor, quizFor } from '@/story/tree'
+import { effectiveLayout, pathFor, quizFor } from '@/story/tree'
 import { Book } from './Book'
 import { Quiz } from './Quiz'
 import { stopAll } from './speech'
@@ -20,7 +20,12 @@ interface Props {
   saveAttempt?: boolean
 }
 
-export function Reader({ story: s, storyId, newStoryHref, saveAttempt = true }: Props) {
+export function Reader({ story, storyId, newStoryHref, saveAttempt = true }: Props) {
+  // Repairs a story whose layout or title was lost in a failed save.
+  const s = useMemo(
+    () => ({ ...story, imageLayout: effectiveLayout(story), title: story.title || 'Your adventure' }),
+    [story],
+  )
   const [phase, setPhase] = useState<'reading' | 'quiz'>('reading')
   // The option picked at each choice, root first. Re-choosing earlier drops
   // everything after it, because that branch no longer happens.

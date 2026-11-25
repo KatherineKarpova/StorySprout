@@ -9,7 +9,7 @@
  * the pages, 14 is the cover and 15 the ending picture.
  */
 
-import type { ImageLayout, Question, StoryNode } from './catalog'
+import type { ImageLayout, Question, StoryNode, StoryRecord } from './catalog'
 
 export const childrenOf = (node: number): [number, number] => [2 * node + 1, 2 * node + 2]
 
@@ -19,6 +19,16 @@ export const panelFor = (node: number, page: 0 | 1) => 2 * node + page
 
 export function layoutForGrade(grade: number): Exclude<ImageLayout, ''> {
   return grade === 1 ? 'grid3x2' : 'grid4x4'
+}
+
+/**
+ * The layout to show a story's sheet with. Normally the saved one; if a
+ * story has a picture sheet and pages but no saved layout (a failed save
+ * once dropped it), the grade decides it, since the layout follows the tree.
+ */
+export function effectiveLayout(s: Pick<StoryRecord, 'imageLayout' | 'imagePaths' | 'nodes' | 'grade'>): ImageLayout {
+  if (s.imageLayout) return s.imageLayout
+  return s.imagePaths?.[0] && s.nodes?.length ? layoutForGrade(s.grade) : ''
 }
 
 /** Pictures in a sheet: one per page, plus cover and ending for the big tree. */
