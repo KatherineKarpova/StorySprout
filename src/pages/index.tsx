@@ -43,7 +43,7 @@ export default function Landing() {
         <main>
           <section className="mx-auto grid max-w-5xl items-center gap-10 px-5 pb-16 pt-8 md:grid-cols-[1.15fr_1fr] md:pt-16">
             <div>
-              <p className="font-display text-lg font-semibold text-coral">For readers ages 6 to 8</p>
+              <p className="font-display text-lg font-semibold text-coral">For readers ages 6 to 10</p>
               <h1 className="mt-3 text-5xl font-semibold leading-[1.05] text-foreground sm:text-6xl">
                 Stories about what your kid loves, at the level they read.
               </h1>

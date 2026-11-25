@@ -57,7 +57,7 @@ export interface Interest {
   emoji: string
 }
 
-/** Popular themes in picture books and early chapter books for ages 6-8. */
+/** Popular themes in picture books and early chapter books for ages 6-10. */
 export const INTERESTS: Interest[] = [
   { id: 'dinosaurs', label: 'Dinosaurs', emoji: '🦕' },
   { id: 'space', label: 'Outer space', emoji: '🚀' },

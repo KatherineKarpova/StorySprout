@@ -35,7 +35,7 @@ export const integrations: Record<
 > = {
   google: { billing: 'user' },
   composio: { billing: 'user' },
-  // StorySprout's readers are 6-8 year olds with no DeepSpace credits, so the
+  // StorySprout's readers are 6-10 year olds with no DeepSpace credits, so the
   // owner pays. These are called only from the generate-story job, which only
   // the capped `startStory` action can enqueue — never from the browser.
   anthropic: { billing: 'developer', serverOnly: true }, // story + quiz text

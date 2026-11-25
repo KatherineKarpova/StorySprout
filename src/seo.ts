@@ -23,7 +23,7 @@
 declare const __DEEPSPACE_SITE_ORIGIN__: string | undefined
 
 export const seo = {
-  title: 'StorySprout | Personalized reading practice for ages 6-8',
+  title: 'StorySprout | Personalized reading practice for ages 6-10',
   description:
     'New illustrated short stories about what your child loves, at their reading level, with phonics practice and comprehension questions.',
   /** Public origin for canonical URLs, og:url, and the sitemap — no trailing
