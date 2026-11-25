@@ -16,14 +16,26 @@ import {
   INTERESTS,
   MAX_CUSTOM_INTEREST_LENGTH,
   MAX_INTERESTS,
+  MAX_CAST,
+  MAX_CAST_DESCRIPTION,
+  MAX_CAST_NAME,
   OWNER_NOT_PAYING,
   OWNER_PAYS,
+  type CastMember,
   READER_COST_ESTIMATE,
   READING_LEVELS,
   type Grade,
 } from '@/story/catalog'
 
 const GRADE_KEY = 'storysprout:grade'
+
+/** What the picker asks the server for. */
+interface StoryAsk {
+  grade: Grade
+  interests: string[]
+  custom: string[]
+  cast: CastMember[]
+}
 
 function rememberedGrade(): Grade | null {
   try {
@@ -54,7 +66,16 @@ export default function NewStoryPage() {
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
   // Set when the owner is not paying: the request waiting for the reader's OK.
-  const [askToPay, setAskToPay] = useState<{ grade: Grade; interests: string[]; custom: string[] } | null>(null)
+  const [askToPay, setAskToPay] = useState<StoryAsk | null>(null)
+  // Optional main characters: rows of name + description; blank rows are ignored.
+  const [cast, setCast] = useState<CastMember[]>(() => {
+    try {
+      const fromRetry = JSON.parse(params.get('cast') ?? '[]') as CastMember[]
+      return Array.isArray(fromRetry) ? fromRetry.slice(0, MAX_CAST) : []
+    } catch {
+      return []
+    }
+  })
   const [error, setError] = useState<string | null>(null)
 
   const count = picked.length + customs.length
@@ -104,7 +125,10 @@ export default function NewStoryPage() {
     } catch {
       /* private mode: just don't remember */
     }
-    await start({ grade, interests: picked, custom: ideas }, false)
+    const chosenCast = cast
+      .map((c) => ({ name: c.name.trim(), description: c.description.trim() }))
+      .filter((c) => c.name)
+    await start({ grade, interests: picked, custom: ideas, cast: chosenCast }, false)
   }
 
   /**
@@ -113,7 +137,7 @@ export default function NewStoryPage() {
    * credits; with `mine`, the reader-paid story is written by writeMyStory
    * (not awaited: it runs about a minute while the story page fills in).
    */
-  async function start(request: { grade: Grade; interests: string[]; custom: string[] }, mine: boolean) {
+  async function start(request: StoryAsk, mine: boolean) {
     setBusy(true)
     setError(null)
     const r = await runAction<{ storyId: string; paidBy?: string }>('startStory', { ...request, useMyCredits: mine })
@@ -264,6 +288,65 @@ export default function NewStoryPage() {
             <Plus aria-hidden /> Add
           </Button>
         </div>
+      </fieldset>
+
+      {/* ── Step 3: main characters (optional) ───────────────────── */}
+      <fieldset className="mt-12">
+        <legend className="font-display text-xl font-semibold text-foreground">
+          <StepDot n={3} /> Who's in the story? <span className="text-muted-foreground">(optional)</span>
+        </legend>
+        <p className="mt-1 text-[15px] text-muted-foreground">
+          Add up to {MAX_CAST} main characters: you, a pet, a friend, anyone! The first one is the hero. Say what they
+          look like, and the pictures will match.
+        </p>
+        <div className="mt-4 space-y-3">
+          {cast.map((c, i) => (
+            <div key={i} className="flex flex-wrap items-start gap-2 rounded-2xl border-2 border-border bg-card p-3 sm:flex-nowrap">
+              <input
+                aria-label={`Character ${i + 1} name`}
+                value={c.name}
+                maxLength={MAX_CAST_NAME}
+                onChange={(e) => setCast((cur) => cur.map((x, k) => (k === i ? { ...x, name: e.target.value } : x)))}
+                onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
+                placeholder={i === 0 ? 'Name, e.g. Sage' : 'Name, e.g. Rosie'}
+                className="h-12 w-full rounded-full border-2 border-input bg-background px-4 text-[16px] text-foreground outline-none focus:border-primary sm:w-44"
+              />
+              <input
+                aria-label={`Character ${i + 1} description`}
+                value={c.description}
+                maxLength={MAX_CAST_DESCRIPTION}
+                onChange={(e) =>
+                  setCast((cur) => cur.map((x, k) => (k === i ? { ...x, description: e.target.value } : x)))
+                }
+                onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
+                placeholder={
+                  i === 0 ? 'a 7 year old girl with long blonde hair and blue eyes' : 'a small white cat with black spots'
+                }
+                className="h-12 min-w-0 flex-1 rounded-full border-2 border-input bg-background px-4 text-[16px] text-foreground outline-none focus:border-primary"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                aria-label={`Remove character ${i + 1}`}
+                className="h-12 rounded-full"
+                onClick={() => setCast((cur) => cur.filter((_, k) => k !== i))}
+              >
+                <X aria-hidden />
+              </Button>
+            </div>
+          ))}
+        </div>
+        {cast.length < MAX_CAST && (
+          <Button
+            type="button"
+            variant="outline"
+            data-testid="add-character"
+            className="mt-3 h-12 rounded-full border-2 px-5 text-[16px] font-semibold"
+            onClick={() => setCast((cur) => [...cur, { name: '', description: '' }])}
+          >
+            <Plus aria-hidden /> Add a character
+          </Button>
+        )}
       </fieldset>
 
       {/* ── Go ────────────────────────────────────────────────────── */}

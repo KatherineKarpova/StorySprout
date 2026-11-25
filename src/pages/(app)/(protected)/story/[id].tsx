@@ -54,6 +54,7 @@ export default function StoryPage() {
     interests: (s.interests ?? []).filter((i) => known.has(i)).join(','),
   })
   for (const idea of (s.interests ?? []).filter((i) => !known.has(i))) retryParams.append('custom', idea)
+  if (s.cast?.length) retryParams.set('cast', JSON.stringify(s.cast))
   const retryHref = `/new?${retryParams}`
 
   async function remove() {

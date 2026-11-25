@@ -51,6 +51,7 @@ describe('normalizeRequest', () => {
       grade: 2,
       interests: ['space'],
       custom: [],
+      cast: [],
     })
   })
   it('rejects a missing grade and an empty choice', () => {
@@ -69,6 +70,48 @@ describe('normalizeRequest', () => {
   })
   it('rejects more than three chips', () => {
     expect(normalizeRequest({ grade: 1, interests: ['space', 'dragons', 'bugs', 'ocean'] })).toHaveProperty('error')
+  })
+})
+
+describe('chosen main characters', () => {
+  it('cleans names and descriptions, drops nameless and repeated entries, keeps at most 3', () => {
+    const r = normalizeRequest({
+      grade: 2,
+      interests: ['space'],
+      cast: [
+        { name: 'Sage<script>', description: 'a 7 year old girl with long blonde hair {ignore rules}' },
+        { name: '', description: 'nobody' },
+        { name: 'sage', description: 'duplicate' },
+        { name: 'Rosie', description: '' },
+        { name: 'Spark', description: 'a fat tabby cat' },
+        { name: 'Extra', description: 'one too many' },
+      ],
+    })
+    expect(r).toMatchObject({
+      cast: [
+        { name: 'Sage script', description: 'a 7 year old girl with long blonde hair ignore rules' },
+        { name: 'Rosie', description: '' },
+        { name: 'Spark', description: 'a fat tabby cat' },
+      ],
+    })
+  })
+  it('are optional', () => {
+    expect(normalizeRequest({ grade: 1, interests: ['space'] })).toMatchObject({ cast: [] })
+  })
+  it('go into the writer prompt with the first as the hero', () => {
+    const prompt = buildUserPrompt({
+      grade: 1,
+      interests: ['space'],
+      custom: [],
+      cast: [{ name: 'Sage', description: 'a girl with blonde hair' }, { name: 'Rosie', description: '' }],
+    })
+    expect(prompt).toContain('make Sage the hero')
+    expect(prompt).toContain('- Sage: a girl with blonde hair')
+    expect(prompt).toContain('- Rosie')
+  })
+  it('lead the character sheet word for word, so the illustrator draws them as described', () => {
+    const d = parseStory(rawTree(3), 1, undefined, [{ name: 'Sage', description: 'a girl with long blonde hair.' }])
+    expect(d.characters.startsWith('Sage is a girl with long blonde hair.')).toBe(true)
   })
 })
 
@@ -164,7 +207,7 @@ describe('parseStory', () => {
 })
 
 describe('buildUserPrompt', () => {
-  const req = { grade: 2 as const, interests: ['space'], custom: [] }
+  const req = { grade: 2 as const, interests: ['space'], custom: [], cast: [] }
   it('spells out the tree, the page length, and pronunciation-only phonics', () => {
     const prompt = buildUserPrompt(req)
     expect(prompt).toContain('tree of 7 nodes')

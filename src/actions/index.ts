@@ -18,6 +18,7 @@ import {
   OWNER_NOT_PAYING,
   OWNER_PAYS,
   READER_PAID_DAILY_LIMIT,
+  type CastMember,
   type StoryRecord,
 } from '../story/catalog'
 import { createActionTools } from '../server/action-routes'
@@ -38,6 +39,8 @@ export interface GenerateStoryPayload {
   grade: 1 | 2 | 3
   interests: string[]
   custom: string[]
+  /** Optional main characters (absent on jobs queued before this option). */
+  cast?: CastMember[]
 }
 
 interface StoryRow {
@@ -171,6 +174,7 @@ export const actions: Record<string, ActionHandler<Env>> = {
       imageLayout: '',
       libraryId: '',
       paidBy: readerPays ? 'reader' : 'owner',
+      cast: req.cast,
       wordCount: 0,
       error: '',
     }
@@ -273,6 +277,7 @@ export const actions: Record<string, ActionHandler<Env>> = {
       grade: (story.data.grade ?? 1) as 1 | 2 | 3,
       interests: interests.filter((i) => known.has(i)),
       custom: interests.filter((i) => !known.has(i)),
+      cast: story.data.cast ?? [],
     }
     try {
       await generateStory(payload, env, {

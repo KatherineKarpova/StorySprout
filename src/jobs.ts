@@ -84,8 +84,13 @@ interface LibraryRow {
 }
 
 const bandFor = (grade: number) => (grade === 1 ? 'tree3' : 'tree7')
-/** Only stories made purely from catalog interests share pictures. */
-const shareable = (p: GenerateStoryPayload) => p.custom.length === 0 && p.interests.length > 0
+/**
+ * Only stories made purely from catalog interests share pictures: typed ideas
+ * and chosen characters can be personal, and library pictures would show
+ * someone else's characters.
+ */
+const shareable = (p: GenerateStoryPayload) =>
+  p.custom.length === 0 && (p.cast?.length ?? 0) === 0 && p.interests.length > 0
 const interestsKey = (ids: string[]) => [...ids].sort().join('+')
 
 /** A saved sheet for the same tree and interests that this reader has not seen. */
@@ -280,7 +285,7 @@ async function writeStory(
   existing?: ExistingPictures,
 ): Promise<StoryDraft> {
   const messages: { role: 'user' | 'assistant'; content: string }[] = [
-    { role: 'user', content: buildUserPrompt(p, existing) },
+    { role: 'user', content: buildUserPrompt({ ...p, cast: p.cast ?? [] }, existing) },
   ]
   let lastError = ''
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -300,7 +305,7 @@ async function writeStory(
     }
     const text = replyText(r.data)
     try {
-      return parseStory(extractJson(text), p.grade, existing)
+      return parseStory(extractJson(text), p.grade, existing, p.cast ?? [])
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err)
       // Logged so a recurring validation failure (each retry is a paid call)

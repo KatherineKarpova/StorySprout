@@ -78,6 +78,16 @@ export const INTERESTS: Interest[] = [
 ]
 
 export const MAX_INTERESTS = 3
+
+/** A main character the reader chose (optional): a name and who/what they are. */
+export interface CastMember {
+  name: string
+  /** Looks and who they are, e.g. "a 7 year old girl with long blonde hair". May be empty. */
+  description: string
+}
+export const MAX_CAST = 3
+export const MAX_CAST_NAME = 24
+export const MAX_CAST_DESCRIPTION = 140
 export const MAX_CUSTOM_INTEREST_LENGTH = 60
 /** Stories each signed-in user may start per UTC day. Owner credits pay for them. */
 export const DAILY_STORY_LIMIT = 2
@@ -194,6 +204,8 @@ export interface StoryRecord {
   libraryId: string
   /** Who paid: the app owner (default) or the reader's own DeepSpace credits. */
   paidBy?: 'owner' | 'reader'
+  /** Main characters the reader chose; absent on stories made before this option. */
+  cast?: CastMember[]
   /** The illustrator's character sheet and per-panel scenes, kept so the
    *  pictures can be redrawn later (older stories have neither). */
   characters?: string
