@@ -228,11 +228,19 @@ Rules for the JSON: "choice" only on nodes that end with a choice, never on endi
  * Tested by hand: the model honors the grid and the character sheet well,
  * but adds thin borders and uneven margins, hence detection, not fixed cuts.
  */
-export function panelGridPrompt(characters: string, scenes: string[], layout: Exclude<ImageLayout, ''>): string {
+export function panelGridPrompt(
+  characters: string,
+  scenes: string[],
+  layout: Exclude<ImageLayout, ''>,
+  /** Owner's change request for a redraw; the scenes still rule what each panel shows. */
+  changes = '',
+): string {
   const [cols, rows] = layout === 'grid4x4' ? [4, 4] : [3, 2]
   const n = cols * rows
   const list = scenes.map((s, i) => `${i + 1}) ${s}`).join(' ')
-  return `A single sheet of ${n} small children's picture book illustrations arranged in an exact, evenly spaced grid of ${cols} columns and ${rows} rows, all ${n} panels the same size and square, separated by thin plain cream gutters, no borders, no frames, no panel numbers. Style for every panel: warm watercolor and colored pencil, soft rounded shapes, friendly expressions, bright but gentle colors, simple clean backgrounds. The same characters appear throughout and must look identical in every panel: ${characters} Panels in reading order, left to right, top row first: ${list} No text, no words, no letters, no writing, no logos.`
+  return `A single sheet of ${n} small children's picture book illustrations arranged in an exact, evenly spaced grid of ${cols} columns and ${rows} rows, all ${n} panels the same size and square, separated by thin plain cream gutters, no borders, no frames, no panel numbers. Style for every panel: warm watercolor and colored pencil, soft rounded shapes, friendly expressions, bright but gentle colors, simple clean backgrounds. The same characters appear throughout and must look identical in every panel: ${characters} Panels in reading order, left to right, top row first: ${list}${
+    changes ? ` Changes requested for this version (keep every panel showing its scene above): ${changes}.` : ''
+  } No text, no words, no letters, no writing, no logos.`
 }
 
 /** Pull the first top-level JSON object out of a model reply. */

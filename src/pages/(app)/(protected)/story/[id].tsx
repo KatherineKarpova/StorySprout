@@ -217,8 +217,10 @@ function CenteredNote({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * Owner-only upgrade: redraw this story's pictures at 2K. Costs about 70
- * credits, so it asks first; the new pictures arrive in the open book live.
+ * Owner-only: "Redraw pictures" opens a short form (how the characters look,
+ * what should be different) and redraws every picture at 2K for about 70
+ * credits. The words never change; the new pictures arrive in the open book
+ * live.
  */
 function RedrawPictures({
   storyId,
@@ -229,50 +231,71 @@ function RedrawPictures({
   redrawn: boolean
   defaultCharacters: string
 }) {
+  const [open, setOpen] = useState(false)
   const [characters, setCharacters] = useState(defaultCharacters)
-  const [confirm, setConfirm] = useState(false)
+  const [changes, setChanges] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [done, setDone] = useState(false)
 
   async function redraw() {
     setBusy(true)
     setError(null)
-    const r = await runAction('redrawPictures', { storyId, characters })
+    const r = await runAction('redrawPictures', { storyId, characters, changes })
     setBusy(false)
-    setConfirm(false)
-    if (!r.success) setError(r.error)
+    if (!r.success) return setError(r.error)
+    setDone(true)
+    setOpen(false)
+    setChanges('')
   }
 
+  const field =
+    'mt-1 w-full rounded-xl border-2 border-input bg-card p-3 text-[15px] text-foreground outline-none focus:border-primary'
   return (
     <div className="mx-auto mt-12 max-w-xl rounded-2xl border-2 border-dashed border-border p-4 text-center text-[15px]">
-      <p className="font-semibold text-foreground">Owner tools{redrawn && ' · pictures already redrawn at 2K'}</p>
-      <label className="mt-3 block text-left text-sm font-semibold text-foreground" htmlFor="redraw-characters">
-        How should the characters look in every picture?
-      </label>
-      <textarea
-        id="redraw-characters"
-        value={characters}
-        maxLength={400}
-        rows={3}
-        onChange={(e) => setCharacters(e.target.value)}
-        placeholder="Sage is a 7 year old girl with long blonde hair and blue eyes, in a yellow sweater. Her grandma has curly blonde hair."
-        className="mt-1 w-full rounded-xl border-2 border-input bg-card p-3 text-[15px] text-foreground outline-none focus:border-primary"
-      />
-      {confirm ? (
-        <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
-          <span className="text-muted-foreground">Redraw all pictures at 2K for about 70 credits?</span>
-          <Button size="sm" loading={busy} onClick={redraw}>
-            {busy ? 'Redrawing… (about 30s)' : 'Yes, redraw'}
-          </Button>
-          <Button variant="ghost" size="sm" disabled={busy} onClick={() => setConfirm(false)}>
-            Cancel
-          </Button>
-        </div>
-      ) : (
-        <Button variant="outline" size="sm" className="mt-2 rounded-full" onClick={() => setConfirm(true)}>
-          <ImageUp aria-hidden /> Redraw pictures in high quality (about 70 credits)
+      <p className="font-semibold text-foreground">Owner tools{redrawn && ' · pictures redrawn at 2K'}</p>
+      {!open ? (
+        <Button variant="outline" size="sm" className="mt-2 rounded-full" onClick={() => setOpen(true)} data-testid="open-redraw">
+          <ImageUp aria-hidden /> Redraw pictures
         </Button>
+      ) : (
+        <div className="mt-3 space-y-3 text-left">
+          <label className="block text-sm font-semibold text-foreground">
+            How should the characters look in every picture?
+            <textarea
+              value={characters}
+              maxLength={400}
+              rows={3}
+              onChange={(e) => setCharacters(e.target.value)}
+              placeholder="Sage is a 7 year old girl with long blonde hair and blue eyes. Rosie is a small white cat with black tabby spots."
+              className={field}
+            />
+          </label>
+          <label className="block text-sm font-semibold text-foreground">
+            What would you like different?
+            <textarea
+              value={changes}
+              maxLength={300}
+              rows={2}
+              onChange={(e) => setChanges(e.target.value)}
+              placeholder="Make it nighttime with more stars, and give Spark a bigger belly."
+              className={field}
+            />
+            <span className="mt-1 block font-normal text-muted-foreground">
+              Remember that the words will stay the same, only the pictures change.
+            </span>
+          </label>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <Button size="sm" loading={busy} onClick={redraw} data-testid="confirm-redraw">
+              {busy ? 'Redrawing… (about 30s)' : 'Redraw all pictures (about 70 credits)'}
+            </Button>
+            <Button variant="ghost" size="sm" disabled={busy} onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
       )}
+      {done && !open && <p className="mt-2 font-semibold text-primary">New pictures are in the book!</p>}
       {error && <p className="mt-2 font-semibold text-destructive">{error}</p>}
     </div>
   )

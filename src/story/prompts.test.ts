@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildUserPrompt,
+  panelGridPrompt,
   cleanCustom,
   decodeDataUrl,
   extractJson,
@@ -112,6 +113,17 @@ describe('chosen main characters', () => {
   it('lead the character sheet word for word, so the illustrator draws them as described', () => {
     const d = parseStory(rawTree(3), 1, undefined, [{ name: 'Sage', description: 'a girl with long blonde hair.' }])
     expect(d.characters.startsWith('Sage is a girl with long blonde hair.')).toBe(true)
+  })
+})
+
+describe('panelGridPrompt', () => {
+  it('adds an owner change request for a redraw, keeping the scenes in charge', () => {
+    const scenes = Array.from({ length: 6 }, (_, i) => `scene ${i}`)
+    const plain = panelGridPrompt('Sage is blonde.', scenes, 'grid3x2')
+    expect(plain).not.toContain('Changes requested')
+    const changed = panelGridPrompt('Sage is blonde.', scenes, 'grid3x2', 'make it nighttime')
+    expect(changed).toContain('Changes requested for this version (keep every panel showing its scene above): make it nighttime.')
+    expect(changed).toContain('3 columns and 2 rows')
   })
 })
 

@@ -340,13 +340,15 @@ export const actions: Record<string, ActionHandler<Env>> = {
     // The owner's description wins (e.g. to fix a hair color the model got
     // wrong); then the saved character sheet. Saved for the next redraw.
     const characters = cleanCustomLong(params.characters) || s.characters || ''
+    // "What would you like different?": only the pictures change, never the words.
+    const changes = cleanCustomLong(params.changes).slice(0, 300)
     if (scenes.length < (layout === 'grid4x4' ? 16 : 6)) return { success: false, error: 'This story is missing picture descriptions.' }
 
     const r = await tools.integration<{ base64Images: string[] }>('gemini/generate-image', {
       model: 'gemini-3.1-flash-image-preview',
       imageSize: '2K',
       aspectRatio: layout === 'grid4x4' ? '1:1' : '3:2',
-      prompt: panelGridPrompt(characters, scenes, layout),
+      prompt: panelGridPrompt(characters, scenes, layout, changes),
     })
     if (!r.success) {
       console.error(`[redrawPictures] story=${story.recordId} failed: ${r.error}`)
