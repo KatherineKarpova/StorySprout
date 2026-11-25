@@ -31,14 +31,14 @@ export function Reader({ story: s, storyId, newStoryHref, saveAttempt = true }: 
 
   return (
     <>
-      <header className="mt-4 text-center">
+      <header className="mt-2 text-center">
         <p className="text-[15px] font-semibold text-coral">{levelFor(s.grade).label} · Choose your own adventure</p>
-        <h1 className="mt-1 text-3xl font-semibold text-foreground sm:text-4xl" data-testid="story-title">
+        <h1 className="text-2xl font-semibold text-foreground sm:text-3xl" data-testid="story-title">
           {s.title}
         </h1>
       </header>
 
-      <div className="mt-5">
+      <div className="mt-3">
         {phase === 'reading' ? (
           <Book
             story={s}

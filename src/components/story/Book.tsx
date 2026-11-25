@@ -68,6 +68,19 @@ export function Book({ story, choices, onChoose, onFinish }: Props) {
   const index = Math.min(at, units.length - 1)
   const unit = units[index]
   const bookRef = useRef<HTMLDivElement>(null)
+  // Where the book starts on the page (below the nav, title, any banner), so
+  // a spread can take exactly the rest of the window's height.
+  const rowRef = useRef<HTMLDivElement>(null)
+  const [top, setTop] = useState(240)
+  useLayoutEffect(() => {
+    const measure = () => {
+      const el = rowRef.current
+      if (el) setTop(Math.round(el.getBoundingClientRect().top + window.scrollY))
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [])
 
   // Switching between one- and two-page views keeps the reader on the same node.
   const lastWide = useRef(wide)
@@ -111,17 +124,20 @@ export function Book({ story, choices, onChoose, onFinish }: Props) {
   const grid = gridFor(story.imageLayout)
   const sheet = grid ? story.imagePaths?.[0] || undefined : undefined
   const painting = story.status === 'illustrating'
-  // Wide: a page's height is limited so a spread fits the screen. Phone: a
-  // page fills the width. Either way it is 2:3, so its picture half is 4:3.
+  // Wide: the spread is as big as the screen allows: as tall as the window
+  // minus the header, and no wider than the window minus the arrows (a
+  // spread is 4/3 of a page's height wide). Phone: a page fills the width.
+  // Either way a page is 2:3, so its picture half is 4:3.
   const pageStyle: React.CSSProperties = wide
-    ? { height: 'min(40rem, calc(100vh - 15rem))', aspectRatio: '2 / 3' }
+    ? { height: `min(calc(100vh - ${top}px - 1.5rem), calc((100vw - 12rem) * 0.75))`, aspectRatio: '2 / 3' }
     : { width: '100%', aspectRatio: '2 / 3' }
   const wideStyle: React.CSSProperties = wide ? { ...pageStyle, aspectRatio: '4 / 3' } : pageStyle
 
   return (
     <div>
-      <div className="flex items-center justify-center gap-2 sm:gap-4">
-        <Arrow dir="prev" disabled={index === 0} onClick={() => go(-1)} />
+      <div ref={rowRef} className="flex items-center justify-center gap-4">
+        {/* Phones put the arrows under the book so a page gets the full width. */}
+        {wide && <Arrow dir="prev" disabled={index === 0} onClick={() => go(-1)} />}
 
         <div
           ref={bookRef}
@@ -190,8 +206,14 @@ export function Book({ story, choices, onChoose, onFinish }: Props) {
           )}
         </div>
 
-        <Arrow dir="next" disabled={blocked || atEnd} onClick={() => go(1)} />
+        {wide && <Arrow dir="next" disabled={blocked || atEnd} onClick={() => go(1)} />}
       </div>
+      {!wide && (
+        <div className="mt-3 flex items-center justify-center gap-6">
+          <Arrow dir="prev" disabled={index === 0} onClick={() => go(-1)} />
+          <Arrow dir="next" disabled={blocked || atEnd} onClick={() => go(1)} />
+        </div>
+      )}
       <p className="mt-3 h-6 text-center text-[15px] font-semibold text-coral" aria-live="polite">
         {blocked ? 'Pick what happens next!' : ''}
       </p>
@@ -296,7 +318,7 @@ function EndSpread({
           grid={grid}
           index={picture}
           alt={story.imageAlts?.[picture] ?? ''}
-          className="aspect-square w-full max-w-[14rem] rounded-2xl shadow-[0_8px_24px_-12px_rgba(90,60,20,0.4)]"
+          className="aspect-square w-full max-w-[min(24rem,40%)] rounded-2xl shadow-[0_8px_24px_-12px_rgba(90,60,20,0.4)]"
         />
       )}
       <p className="font-display text-5xl font-semibold text-primary">The End</p>
@@ -329,8 +351,13 @@ function Arrow({ dir, disabled, onClick }: { dir: 'prev' | 'next'; disabled: boo
   )
 }
 
-/** Starting type size per grade; shrunk until the text fits its half page. */
+/**
+ * Type size per grade for a ~400px-wide page; bigger pages start bigger (up
+ * to 2.2×) so the text half stays filled, then shrink until the text fits.
+ */
 const TEXT_PX: Record<number, number> = { 1: 24, 2: 21, 3: 19 }
+const BASE_PAGE_WIDTH = 400
+const MAX_TEXT_SCALE = 2.2
 const MIN_TEXT_PX = 14
 
 /**
@@ -356,7 +383,8 @@ function PageText({
     const el = boxRef.current
     if (!el) return
     const fit = () => {
-      let size = TEXT_PX[grade] ?? 20
+      const scale = Math.min(MAX_TEXT_SCALE, Math.max(1, el.clientWidth / BASE_PAGE_WIDTH))
+      let size = Math.round((TEXT_PX[grade] ?? 20) * scale)
       el.style.fontSize = `${size}px`
       while (el.scrollHeight > el.clientHeight + 1 && size > MIN_TEXT_PX) {
         size -= 1

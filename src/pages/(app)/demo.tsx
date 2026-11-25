@@ -28,8 +28,8 @@ export default function DemoPage() {
   }, [])
 
   return (
-    <article className="mx-auto max-w-6xl px-4 pb-28 pt-4 sm:pt-6">
-      <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3 rounded-2xl bg-accent px-5 py-2.5">
+    <article className="mx-auto max-w-[120rem] px-4 pb-28 pt-3">
+      <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3 rounded-2xl bg-accent px-5 py-1.5">
         <p className="text-[15px] font-semibold text-accent-foreground">
           <Sparkles className="mr-1.5 inline h-4 w-4" aria-hidden />
           A sample story. Sign in to make your own about anything you like!

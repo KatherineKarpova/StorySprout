@@ -115,7 +115,7 @@ export default function StoryPage() {
   }
 
   return (
-    <article className="mx-auto max-w-6xl px-4 pb-28 pt-6 sm:pt-10">
+    <article className="mx-auto max-w-[120rem] px-4 pb-28 pt-3">
       <Link to="/home" className="inline-flex items-center gap-1.5 text-[15px] font-semibold text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-4 w-4" aria-hidden /> Bookshelf
       </Link>
