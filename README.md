@@ -1,4 +1,4 @@
-# StorySprout 🌱📖
+# StorySprout
 
 **Choose-your-own-adventure picture books for early readers (grades 1–3, ages 6–10), written about whatever the child loves, at their reading level, with phonics and comprehension practice.**
 
