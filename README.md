@@ -67,7 +67,7 @@ flowchart LR
 - **2K pictures, paid for by readers.** 1K panels looked soft on half a page, and the 1K model lost track of panel order on 16-panel grids. 2K fixed both at ~10× the price. So `OWNER_PAYS = false`: every story asks the reader to use their **own** DeepSpace credits (about 75 per story), and nothing is spent until they agree. Setting `OWNER_PAYS = true` restores owner-paid stories with daily caps and an automatic switch to reader-paid when the owner's credits run out.
 - **Shared picture library.** A whole grid image is reused (partial reuse saves nothing, since one grid costs the same for 1 panel or 16). When a new story has the same tree size and exactly the same interest chips as a saved sheet the reader hasn't seen, Claude writes a **new** story to fit those pictures, and no image is generated. Stories with a typed idea are never shared, because a typed idea can be personal ("my cat Pepper").
 - **Shared word cache.** A tapped word is recorded once, ever, then served to every reader for free.
-- **Claude Haiku over Sonnet.** Sonnet was ~60% of an early story's cost. Strict validation plus one retry catches weaker drafts.
+- **Claude Haiku 4.5.** Sonnet was ~60% of an early story's cost. Haiku 5.5 reasons before answering and once spent its whole token budget thinking on a grade 3 story without writing anything; Haiku 4.5 doesn't reason unless asked (measured: 0 reasoning tokens, 41s for a full grade 3 tree). Strict validation plus one retry catches weaker drafts.
 
 ## Security
 

@@ -202,10 +202,10 @@ describe('parseStory', () => {
     raw.nodes[0].comprehension = [q3('only one')]
     expect(() => parseStory(raw, 1)).toThrow(/2 comprehension/)
   })
-  it('rejects a phonics word that is not in the story', () => {
+  it('keeps a phonics question whose word is not on a page (not worth a paid retry)', () => {
     const raw = rawTree(3)
     raw.nodes[1].phonics = phon('dragon')
-    expect(() => parseStory(raw, 1)).toThrow(/not in the story/)
+    expect(parseStory(raw, 1).nodes[1].phonics.word).toBe('dragon')
   })
   it('fits a story to pictures from the library, ignoring any new scenes', () => {
     const existing = {
@@ -227,6 +227,7 @@ describe('buildUserPrompt', () => {
     expect(prompt).toContain('node 6: what happens after option 2 of node 2; an ENDING')
     expect(prompt).toContain('28-40 words')
     expect(prompt).toContain('never ask how many syllables')
+    expect(prompt).toContain('never ask what a word or prefix means')
   })
   it('asks the writer to fit existing pictures instead of inventing scenes', () => {
     const existing = { characters: 'Mia has red curls.', panels: Array.from({ length: 16 }, (_, i) => ({ scene: `pic ${i}`, alt: '' })) }

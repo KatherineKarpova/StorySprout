@@ -217,7 +217,7 @@ Return JSON with exactly this shape (the "nodes" array has ${nodeCount} entries,
   ]
 }
 
-Rules for the JSON: "choice" only on nodes that end with a choice, never on endings; node 0 has ${req.grade === 1 ? '2 comprehension questions and every other node 1' : 'exactly 1 comprehension question, like every node'}; phonics questions are about pronunciation, e.g. which word rhymes with it, which word starts or ends with the same sound, which word has the same vowel sound, or what sound a letter group makes in it; never ask how many syllables a word has; phonics choices are 1-3 words each; exactly 3 choices per question; vary which choice is correct; all phonics words are different.`
+Rules for the JSON: "choice" only on nodes that end with a choice, never on endings; node 0 has ${req.grade === 1 ? '2 comprehension questions and every other node 1' : 'exactly 1 comprehension question, like every node'}; phonics questions are ONLY about how the word SOUNDS when said aloud: which word rhymes with it, which word starts or ends with the same sound, which word has the same vowel sound, or what sound a letter group makes in it; never ask what a word or prefix means, never ask about hidden words, spelling or synonyms, and never ask how many syllables a word has; phonics choices are 1-3 words each; exactly 3 choices per question; vary which choice is correct; all phonics words are different.`
 }
 
 /**
@@ -267,12 +267,6 @@ function choicesAndAnswer(q: Record<string, unknown>, where: string) {
   }
   return { choices, answerIndex }
 }
-
-const wordIn = (text: string, word: string) =>
-  text
-    .toLowerCase()
-    .split(/[^\p{L}'-]+/u)
-    .includes(word.toLowerCase())
 
 function parsePhonics(raw: unknown, where: string): PhonicsQuestion {
   const p = (raw ?? {}) as Record<string, unknown>
@@ -348,12 +342,10 @@ export function parseStory(raw: unknown, grade: Grade, existing?: ExistingPictur
     return { pages, ...(choice ? { choice } : {}), phonics, comprehension: comp }
   })
 
-  // A phonics word must really be in the story (asked for on its own node's
-  // pages; anywhere in the story is enough to keep the quiz honest).
-  const allText = nodes.flatMap((n) => n.pages.map((pg) => pg.text)).join(' ')
-  for (const node of nodes) {
-    if (!wordIn(allText, node.phonics.word)) throw new Error(`Phonics word "${node.phonics.word}" is not in the story.`)
-  }
+  // The writer is asked to take each phonics word from its node's pages, but
+  // a word in a different form ("disappeared" vs "disappear") is not worth a
+  // paid retry: a pronunciation question still works without the word being
+  // on a page; it just is not highlighted in the story.
 
   // The reader's own descriptions lead, word for word, so the illustrator
   // gets them exactly (a heroine described as blonde must be drawn blonde).

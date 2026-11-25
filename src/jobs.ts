@@ -37,11 +37,15 @@ import {
 import { recordSpeech } from './story/voice'
 
 /**
- * Haiku, not Sonnet: Claude was ~60% of a story's cost on Sonnet. Stories for
- * young readers are simple, and parseStory's strict validation (one retry)
- * catches a weaker draft either way.
+ * Claude Haiku 4.5. Haiku over Sonnet: Sonnet was ~60% of a story's cost.
+ * 4.5 over 5.5: Haiku 5.5 reasons before answering and those tokens count
+ * against max_tokens; on a grade 3 tree it spent the whole 20k budget
+ * thinking and wrote nothing (90s, billed to the reader), and the proxy
+ * ignores `thinking: disabled`. Haiku 4.5 does not reason unless asked:
+ * measured on a live grade 3 prompt, 0 thinking tokens, ~4k output, 41s,
+ * valid tree. parseStory's validation (one retry) catches a weaker draft.
  */
-export const STORY_MODEL = 'claude-haiku-5-5'
+export const STORY_MODEL = 'claude-haiku-4-5'
 
 /**
  * Sheet settings per layout: 2K for every story. Measured: a 4×4 sheet at 2K
@@ -291,10 +295,8 @@ async function writeStory(
   for (let attempt = 0; attempt < 2; attempt++) {
     const r = await tools.integration<unknown>('anthropic/chat-completion', {
       model: STORY_MODEL,
-      // The model reasons before it answers, and reasoning tokens count
-      // against this budget (4096 was used up by reasoning alone once). A
-      // 7-node tree is ~3-4k tokens of JSON.
-      max_tokens: 20000,
+      // A 7-node tree is ~4k tokens of JSON; Haiku 4.5 spends none on reasoning.
+      max_tokens: 16000,
       temperature: 0.9,
       system: SYSTEM_PROMPT,
       messages,
