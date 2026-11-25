@@ -44,16 +44,15 @@ import { recordSpeech } from './story/voice'
 export const STORY_MODEL = 'claude-haiku-5-5'
 
 /**
- * Sheet settings per layout, both at 1K with the standard-priced model.
- * Measured: a 4×4 sheet at 2K (gemini-3.1-flash-image-preview) cost $0.72,
- * ~11× the 1K sheet's ~$0.065, which on the free tier's 500 credits meant
- * only a handful of grade 2-3 stories. At 1K the 4×4 panels are ~256px and
- * a little softer on half a page; a side-by-side check judged that
- * acceptable for the watercolor style.
+ * Sheet settings per layout: 2K for every story. Measured: a 4×4 sheet at 2K
+ * (gemini-3.1-flash-image-preview) costs ~$0.70, ~10× a 1K sheet (~$0.07),
+ * but 1K panels (~256px) looked soft on half a page and the 1K model lost
+ * track of panel order on 16-panel grids; at 2K both were fixed. Readers pay
+ * (OWNER_PAYS in catalog.ts), so the cost is shown to them before they agree.
  */
 const SHEETS: Record<Exclude<ImageLayout, ''>, { model: string; aspectRatio: string; imageSize?: string }> = {
-  grid3x2: { model: 'gemini-2.5-flash-image', aspectRatio: '3:2' },
-  grid4x4: { model: 'gemini-2.5-flash-image', aspectRatio: '1:1' },
+  grid3x2: { model: 'gemini-3.1-flash-image-preview', aspectRatio: '3:2', imageSize: '2K' },
+  grid4x4: { model: 'gemini-3.1-flash-image-preview', aspectRatio: '1:1', imageSize: '2K' },
 }
 
 const JOB_DEADLINE_MS = 8 * 60 * 1000

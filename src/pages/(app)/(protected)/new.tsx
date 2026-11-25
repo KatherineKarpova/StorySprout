@@ -17,6 +17,7 @@ import {
   MAX_CUSTOM_INTEREST_LENGTH,
   MAX_INTERESTS,
   OWNER_NOT_PAYING,
+  OWNER_PAYS,
   READER_COST_ESTIMATE,
   READING_LEVELS,
   type Grade,
@@ -278,14 +279,21 @@ export default function NewStoryPage() {
           {!busy && <Sparkles aria-hidden />}
           {busy ? 'Starting…' : 'Make my story'}
         </Button>
+        {!OWNER_PAYS && (
+          <p className="text-[15px] text-muted-foreground">
+            Stories are made with your own DeepSpace credits (about 75 each). You'll be asked first.
+          </p>
+        )}
         {!grade && <p className="text-[15px] text-muted-foreground">First, pick how you read.</p>}
         {grade && !hasTopic && <p className="text-[15px] text-muted-foreground">Now pick something you like.</p>}
         {askToPay && (
           <div role="alertdialog" aria-label="Use your own credits?" className="w-full max-w-xl rounded-2xl border-2 border-coral bg-secondary p-5 text-secondary-foreground">
-            <p className="font-display text-lg font-semibold">StorySprout's free stories are used up for now.</p>
+            <p className="font-display text-lg font-semibold">
+              {OWNER_PAYS ? "StorySprout's free stories are used up for now." : 'Make this story with your DeepSpace credits?'}
+            </p>
             <p className="mt-1 text-[15px]">
-              A grown-up can make this story with your own DeepSpace credits ({READER_COST_ESTIMATE[askToPay.grade]}).
-              Nothing is spent unless you say yes.
+              A grown-up can make this story with your own DeepSpace credits ({READER_COST_ESTIMATE[askToPay.grade]}),
+              with high-quality pictures. Nothing is spent unless you say yes.
             </p>
             <div className="mt-4 flex flex-wrap gap-3">
               <Button

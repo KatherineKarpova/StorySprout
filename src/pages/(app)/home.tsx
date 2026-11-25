@@ -14,7 +14,7 @@ import { Panel } from '@/components/story/Panel'
 import { gridFor } from '@/story/panels'
 import { coverPanel } from '@/story/tree'
 import { cn } from '@/lib/utils'
-import { DAILY_STORY_LIMIT, interestLabel, levelFor, type QuizAttemptRecord, type StoryRecord } from '@/story/catalog'
+import { DAILY_STORY_LIMIT, OWNER_PAYS, READER_PAID_DAILY_LIMIT, interestLabel, levelFor, type QuizAttemptRecord, type StoryRecord } from '@/story/catalog'
 
 export default function HomePage() {
   const { isSignedIn, isLoaded, user } = useAuthProfileReady({ requireUser: true })
@@ -41,7 +41,7 @@ export default function HomePage() {
   return (
     <>
       {/* The app owner is always an admin; the actions re-check ownership. */}
-      {user?.role === 'admin' && <WhoPays />}
+      {OWNER_PAYS && user?.role === 'admin' && <WhoPays />}
       <Shelf />
     </>
   )
@@ -64,7 +64,7 @@ function Shelf() {
   // Mirrors startStory: failed stories do not use up the reader's day.
   const left = Math.max(
     0,
-    DAILY_STORY_LIMIT - stories.filter((s) => s.createdAt.startsWith(today) && s.data.status !== 'failed').length,
+    (OWNER_PAYS ? DAILY_STORY_LIMIT : READER_PAID_DAILY_LIMIT) - stories.filter((s) => s.createdAt.startsWith(today) && s.data.status !== 'failed').length,
   )
   const stars = [...best.values()].reduce((n, b) => n + b.correct, 0)
 

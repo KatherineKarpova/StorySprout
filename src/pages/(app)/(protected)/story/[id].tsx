@@ -64,7 +64,14 @@ export default function StoryPage() {
     else setDeleting(false)
   }
 
-  if (s.status === 'failed') {
+  // A reader-paid story is written inside the reader's own request; if they
+  // closed the tab it can stop part-way. After 10 minutes, offer a way out.
+  const stuck =
+    s.paidBy === 'reader' &&
+    s.status !== 'ready' &&
+    s.status !== 'failed' &&
+    Date.now() - Date.parse(story.createdAt) > 10 * 60 * 1000
+  if (s.status === 'failed' || stuck) {
     return (
       <CenteredNote>
         <span className="block text-5xl" aria-hidden>

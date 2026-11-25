@@ -11,7 +11,15 @@
 import { appFiles, enqueueJob } from 'deepspace/worker'
 import type { ActionHandler, ActionResult, ActionTools } from 'deepspace/worker'
 import type { Env } from '../../worker'
-import { APP_DAILY_STORY_LIMIT, DAILY_STORY_LIMIT, INTERESTS, OWNER_NOT_PAYING, type StoryRecord } from '../story/catalog'
+import {
+  APP_DAILY_STORY_LIMIT,
+  DAILY_STORY_LIMIT,
+  INTERESTS,
+  OWNER_NOT_PAYING,
+  OWNER_PAYS,
+  READER_PAID_DAILY_LIMIT,
+  type StoryRecord,
+} from '../story/catalog'
 import { createActionTools } from '../server/action-routes'
 import { generateStory, ownerOutKey } from '../jobs'
 import { decodeDataUrl, normalizeRequest, normalizeWord, panelGridPrompt, wordClipId } from '../story/prompts'
@@ -59,8 +67,6 @@ async function loadOwnStory(tools: ActionTools, userId: string, storyId: unknown
   return record.createdBy === userId ? record : null
 }
 
-/** Stories a reader may make per day with their own credits. */
-const READER_PAID_DAILY_LIMIT = 5
 const OWNER_PAUSED_ID = 'owner-paused'
 
 /** Owner-typed character description: plain text, one paragraph, ≤400 chars. */
@@ -70,6 +76,7 @@ function cleanCustomLong(value: unknown): string {
 
 /** False when the owner switched paying off, or ran out of credits today. */
 async function ownerPaysNow(tools: ActionTools): Promise<boolean> {
+  if (!OWNER_PAYS) return false
   const day = new Date().toISOString().slice(0, 10)
   const [paused, out] = await Promise.all([tools.get('usage', OWNER_PAUSED_ID), tools.get('usage', ownerOutKey(day))])
   return !paused.success && !out.success
@@ -197,7 +204,7 @@ export const actions: Record<string, ActionHandler<Env>> = {
    * recordings are capped per reader and app-wide per day; a cache hit is
    * never capped.
    */
-  sayWord: async ({ userId, params, tools, env }) => {
+  sayWord: async ({ userId, params, tools, env, callerJwt }) => {
     if (userId.startsWith('anon-')) return { success: false, error: 'Sign in to hear words.' }
     const word = normalizeWord(params.word)
     if (!word) return { success: false, error: 'That is not a word I can say.' }
@@ -224,7 +231,9 @@ export const actions: Record<string, ActionHandler<Env>> = {
     await tools.create('usage', { userId, day, kind: 'word' })
 
     try {
-      const clip = await recordSpeech(tools, `${word}.`)
+      // Readers pay for new words too when the owner does not pay for stories.
+      const voiceTools = OWNER_PAYS ? tools : createActionTools(env, userId, callerJwt, { billCaller: true })
+      const clip = await recordSpeech(voiceTools, `${word}.`)
       // App scope: public, shared by every reader. A pronunciation is not
       // private data, and sharing it is what makes the cache work.
       const stored = await appFiles(env, { scope: 'app', userId }).upload(clip, {

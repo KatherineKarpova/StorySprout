@@ -97,8 +97,21 @@ export const APP_DAILY_STORY_LIMIT = 4
  * with the reader's own DeepSpace credits.
  */
 export const OWNER_NOT_PAYING = 'owner_not_paying'
-/** What a reader-paid story roughly costs, shown before they agree. */
-export const READER_COST_ESTIMATE: Record<number, string> = { 1: 'about 10 credits', 2: 'about 15 credits', 3: 'about 15 credits' }
+
+/**
+ * Does the app owner pay for stories? No: every story is made with the
+ * reader's own DeepSpace credits, after they agree (the owner chose 2K
+ * pictures for every story, ~75 credits each, which the free tier's 500
+ * non-renewing credits could not carry). Set true to pay again: the daily
+ * caps, the out-of-credits fallback and the bookshelf switch all still work.
+ */
+export const OWNER_PAYS = false
+
+/** Stories a reader may make per day with their own credits (a stuck button cannot drain them). */
+export const READER_PAID_DAILY_LIMIT = 5
+
+/** What a story roughly costs, shown before a reader agrees to pay. */
+export const READER_COST_ESTIMATE: Record<number, string> = { 1: 'about 75 credits', 2: 'about 75 credits', 3: 'about 75 credits' }
 
 /** Nodes in a story tree: one choice for grade 1, two for grades 2-3. */
 export function nodeCountFor(grade: number): 3 | 7 {
