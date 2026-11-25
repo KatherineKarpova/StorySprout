@@ -198,9 +198,11 @@ export function Book({ story, choices, onChoose, onFinish }: Props) {
               style={wideStyle}
               onQuiz={onFinish}
               onOtherPath={() => {
-                // Back to the last choice, so the child can pick the other option.
-                const last = units.map((u) => u.kind).lastIndexOf('choice')
-                if (last >= 0) setAt(last)
+                // Back to the FIRST choice: the biggest fork, so "the other
+                // path" really is a different story. The earlier pick stays
+                // highlighted there; choosing again resets what came after.
+                const first = units.findIndex((u) => u.kind === 'choice')
+                if (first >= 0) setAt(first)
               }}
             />
           )}
