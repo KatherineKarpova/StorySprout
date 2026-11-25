@@ -4,7 +4,7 @@
 
 **Live:** https://storysprout.app.space · **Sample story (no sign-in):** https://storysprout.app.space/demo
 
-A child picks a reading level, up to three topics they love (chips like *Dinosaurs* or *Outer space*, or their own typed idea), and, optionally, up to three main characters with how they look (*Sage, a 7 year old girl with long blonde hair*). StorySprout writes a brand-new illustrated adventure in about a minute. Every page is half picture, half text. At each fork the child decides what happens next. Any word can be tapped to hear it read aloud. At the end, five questions check what they understood and how words sound.
+A child picks a reading level, up to three topics they love (chips like *Dinosaurs* or *Outer space*, or their own typed idea), and, optionally, up to three main characters with how they look. StorySprout writes a brand-new illustrated adventure in about a minute. Every page is half picture, half text. At each fork the child decides what happens next. Any word can be tapped to hear it read aloud. At the end, five questions check what they understood and how words sound.
 
 Built on [DeepSpace](https://docs.deep.space) (Cloudflare Workers + Durable Objects) as a build exercise.
 
