@@ -110,6 +110,12 @@ describe('chosen main characters', () => {
     expect(prompt).toContain('- Sage: a girl with blonde hair')
     expect(prompt).toContain('- Rosie')
   })
+  it('keep the combined character sheet within the stories.characters limit (bug seen live)', () => {
+    const long = 'x'.repeat(140)
+    const raw = { ...rawTree(3), characters: 'y'.repeat(400) }
+    const cast = ['A', 'B', 'C'].map((name) => ({ name, description: long }))
+    expect(parseStory(raw, 1, undefined, cast).characters.length).toBeLessThanOrEqual(1000)
+  })
   it('lead the character sheet word for word, so the illustrator draws them as described', () => {
     const d = parseStory(rawTree(3), 1, undefined, [{ name: 'Sage', description: 'a girl with long blonde hair.' }])
     expect(d.characters.startsWith('Sage is a girl with long blonde hair.')).toBe(true)

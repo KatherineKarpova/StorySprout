@@ -148,6 +148,7 @@ export async function generateStory(p: GenerateStoryPayload, env: Env, run: Stor
   const patch = async (data: Partial<StoryRecord>) => {
     const r = await tools.update('stories', p.storyId, data)
     if (!r.success) console.error(`[story ${p.storyId}] record update failed: ${r.error}`)
+    return r.success
   }
   const checkAlive = () => {
     if (run.signal.aborted) throw new Error('Canceled')
@@ -186,7 +187,9 @@ export async function generateStory(p: GenerateStoryPayload, env: Env, run: Stor
     console.info(`[story ${p.storyId}] reusing library sheet ${reused.recordId}`)
     await tools.update('picture_library', reused.recordId, { uses: (reused.data.uses ?? 0) + 1 })
   }
-  await patch({
+  // The story's text must be saved before anything else is spent on it:
+  // a story whose words did not save must not go on to (paid) pictures.
+  const saved = await patch({
     title: draft.title,
     nodes: draft.nodes,
     imageLayout: draft.layout,
@@ -200,6 +203,10 @@ export async function generateStory(p: GenerateStoryPayload, env: Env, run: Stor
     status: reused ? 'recording' : 'illustrating',
     progressMessage: reused ? 'Recording the tricky words…' : 'Painting the pictures…',
   })
+  if (!saved) {
+    await patch({ status: 'failed', progressMessage: '', error: 'The story could not be saved. Please try a new story.' })
+    throw new Error('story text could not be saved')
+  }
   run.progress(0.4, reused ? 'recording' : 'illustrating')
 
   // ── 2. One grid image of every panel (a failure leaves none) ─────────────

@@ -30,7 +30,8 @@ export const storiesSchema: CollectionSchema = {
     { name: 'paidBy', storage: 'text', interpretation: { kind: 'select', options: ['owner', 'reader'] } },
     /** Optional main characters the reader chose ([{ name, description }]). */
     { name: 'cast', storage: 'text', interpretation: { kind: 'json' } },
-    { name: 'characters', storage: 'text', interpretation: 'plain', maxLength: 400 },
+    // Reader's own character descriptions + the writer's sheet (capped at 600).
+    { name: 'characters', storage: 'text', interpretation: 'plain', maxLength: 1000 },
     { name: 'scenes', storage: 'text', interpretation: { kind: 'json' } },
     { name: 'hiRes', storage: 'number', interpretation: { kind: 'boolean' } },
     { name: 'wordCount', storage: 'number', interpretation: 'plain' },
